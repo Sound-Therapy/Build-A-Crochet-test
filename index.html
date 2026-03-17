@@ -2,22 +2,22 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.5.6</title>
+    <title>Build-A-Crochet v5.6.0 (Horizontal Sync)</title>
     <style>
-        body { margin: 0; background: #222; color: white; overflow: hidden; display: flex; touch-action: none; }
+        body { margin: 0; background: #222; color: white; overflow: hidden; display: flex; touch-action: none; font-family: sans-serif; }
         #panel { width: 80px; background: #333; display: flex; flex-direction: column; align-items: center; padding: 10px; z-index: 10; border-right: 1px solid #444; }
-        .btn { width: 50px; height: 50px; background: #ff69b4; border-radius: 10px; cursor: pointer; border: 2px solid #fff; }
+        .btn { width: 50px; height: 50px; background: #ff69b4; border-radius: 10px; cursor: pointer; border: 2px solid #fff; margin-bottom: 5px;}
         #container { flex-grow: 1; height: 100vh; position: relative; }
-        #status { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 11px; pointer-events: none; }
+        #status { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 11px; pointer-events: none; z-index: 20; }
     </style>
 </head>
 <body>
     <div id="panel">
         <button class="btn" onclick="spawn()"></button>
-        <p style="font-size: 10px; margin-top: 5px;">ADD EGG</p>
+        <p style="font-size: 10px; margin: 0 0 15px 0;">ADD EGG</p>
     </div>
     <div id="container">
-        <div id="status">Engine Ready v5.5.6</div>
+        <div id="status">Engine Ready v5.6.0</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
@@ -27,25 +27,31 @@
         let scene, camera, renderer, controls, egg = null;
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
-        let topH, bottomH, moveH;
+        
+        // Handles
+        let topH, bottomH, moveH, rightH;
         let dragTarget = null;
-        let prevY = 0;
-        const UNIT_H = 20; // 에그 기본 높이 기준
+        let prevX = 0, prevY = 0;
+        
+        // Base Dimensions
+        const BASE_H = 20; // 기본 높이
+        const BASE_R = 7;  // 기본 반지름 (두께)
 
         function init() {
             scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1a1a);
             camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(40, 40, 40);
+            camera.position.set(50, 50, 50);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth - 80, window.innerHeight);
             document.getElementById('container').appendChild(renderer.domElement);
 
-            scene.add(new THREE.GridHelper(100, 20, 0x555555, 0x333333));
+            scene.add(new THREE.GridHelper(100, 20, 0x444444, 0x222222));
             scene.add(new THREE.AmbientLight(0xffffff, 1));
-
+            
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-
+            
             window.addEventListener('pointerdown', onDown);
             window.addEventListener('pointermove', onMove);
             window.addEventListener('pointerup', onUp);
@@ -55,69 +61,105 @@
 
         window.spawn = function() {
             if (egg) return;
-            // 에그 생성 (LatheGeometry로 실제 에그 모양 구현)
+            
+            // LatheGeometry로 에그 모양 구현 (X축 기반으로 생성)
             const points = [];
             for (let i = 0; i <= 20; i++) {
                 const t = i / 20;
-                const y = t * UNIT_H;
-                const r = 7 * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+                const y = t * BASE_H;
+                const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - (BASE_H/2)) / (BASE_H/2), 2)));
                 points.push(new THREE.Vector2(Math.max(0.1, r), y));
             }
+            // Points를 회전시켜 에그를 세로로 세움 (Lathe는 기본적으로 Y축 회전)
             const geo = new THREE.LatheGeometry(points, 32);
-            const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+            // Geometry 좌표 자체를 수정하여 왼쪽(X=0)에 고정되도록 초기 배치
+            geo.translate(BASE_R, 0, 0); 
+            
+            const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
             egg = new THREE.Mesh(geo, mat);
             scene.add(egg);
 
-            // 핸들 생성
+            // 핸들 생성 (모두 동일한 크기와 모양)
             const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
-            topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); // 위 스케일
-            bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); // 아래 스케일
-            moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); // 이동
             
-            topH.visible = bottomH.visible = moveH.visible = false;
-            scene.add(topH); scene.add(bottomH); scene.add(moveH);
+            // 1. 위 스케일 (진한 파랑)
+            topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); 
+            // 2. 아래 스케일 (하늘색)
+            bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); 
+            // 3. 이동 (초록색)
+            moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); 
+            // 4. 가로 스케일 (새로운 파랑 - 오른쪽 배치)
+            rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); 
+            
+            // 초기에는 보이지 않음
+            topH.visible = bottomH.visible = moveH.visible = rightH.visible = false;
+            
+            scene.add(topH); scene.add(bottomH); scene.add(moveH); scene.add(rightH);
             
             document.getElementById('status').innerText = "Egg Ready. Click the Egg!";
+            console.log("Spawned");
         }
 
         function onDown(e) {
-            const rect = renderer.domElement.getBoundingClientRect();
-            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            updateMouseCoords(e);
             raycaster.setFromCamera(mouse, camera);
 
             if (egg) {
-                const hits = raycaster.intersectObjects([topH, bottomH, moveH, egg]);
+                // 클릭한 대상 확인
+                const targets = [topH, bottomH, moveH, rightH, egg];
+                const hits = raycaster.intersectObjects(targets.filter(t => t && (t.visible || t === egg)));
+                
                 if (hits.length > 0) {
                     const obj = hits[0].object;
                     if (obj === egg) {
-                        topH.visible = bottomH.visible = moveH.visible = true;
+                        // 에그 클릭 시 핸들 표시
+                        topH.visible = bottomH.visible = moveH.visible = rightH.visible = true;
                     } else {
+                        // 핸들 클릭 시 드래그 시작
                         dragTarget = obj;
                         controls.enabled = false;
+                        prevX = e.clientX;
                         prevY = e.clientY;
                     }
                 } else {
-                    topH.visible = bottomH.visible = moveH.visible = false;
+                    // 배경 클릭 시 핸들 숨김
+                    topH.visible = bottomH.visible = moveH.visible = rightH.visible = false;
                 }
             }
         }
 
         function onMove(e) {
             if (!dragTarget || !egg) return;
-            const dy = (prevY - e.clientY);
+            
+            const dx = (e.clientX - prevX); // X축 이동량
+            const dy = (prevY - e.clientY); // Y축 이동량
+            prevX = e.clientX;
             prevY = e.clientY;
 
             if (dragTarget === moveH) {
+                // 수직 이동 (초록 점)
                 egg.position.y += dy * 0.1;
             } else if (dragTarget === topH) {
+                // 위쪽 스케일 (바닥 고정 - 진한 파란 점)
                 egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
             } else if (dragTarget === bottomH) {
+                // 아래쪽 스케일 (꼭대기 고정 - 하늘색 점)
                 const oldS = egg.scale.y;
                 const newS = Math.max(0.1, oldS - dy * 0.01);
                 const diff = newS - oldS;
                 egg.scale.y = newS;
-                egg.position.y -= diff * UNIT_H; // 위쪽 고정 보정식
+                egg.position.y -= diff * BASE_H; 
+            } else if (dragTarget === rightH) {
+                // 가로 스케일 (왼쪽 고정 - 오른쪽 파란 점)
+                const oldS = egg.scale.x;
+                // 오른쪽으로 드래그하면 커지고, 왼쪽으로 드래그하면 작아짐
+                const newS = Math.max(0.1, oldS + dx * 0.01);
+                const diff = newS - oldS;
+                
+                egg.scale.x = newS;
+                // 오른쪽으로 스케일이 늘어나는 만큼 위치를 보정하여 왼쪽 좌표를 고정함
+                // Geometry가 BASE_R만큼 이동해 있으므로 보정식에 반영
+                egg.position.x += diff * BASE_R; 
             }
         }
 
@@ -126,17 +168,39 @@
             controls.enabled = true;
         }
 
+        function updateMouseCoords(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        }
+
         function animate() {
             requestAnimationFrame(animate);
-            if (egg && topH) {
-                const h = UNIT_H * egg.scale.y;
-                const bY = egg.position.y;
-                const tY = bY + h;
-                topH.position.set(egg.position.x, tY, egg.position.z);
-                moveH.position.set(egg.position.x, tY + 4, egg.position.z);
-                bottomH.position.set(egg.position.x, bY, egg.position.z);
+            
+            // 모든 핸들 위치 실시간 동기화
+            if (egg && topH && bottomH && moveH && rightH) {
+                const curH = BASE_H * egg.scale.y; // 현재 높이
+                const curR = BASE_R * egg.scale.x; // 현재 반지름
+                const bY = egg.position.y;        // 현재 바닥 Y
+                const tY = bY + curH;             // 현재 꼭대기 Y
+                
+                // 에그의 현재 왼쪽 끝(Pivot) 좌표
+                const pivotX = egg.position.x - curR;
+
+                // 1. 위/이동 핸들 (상단 중앙 배치)
+                topH.position.set(pivotX + curR, tY, egg.position.z);
+                moveH.position.set(pivotX + curR, tY + 4, egg.position.z);
+                
+                // 2. 아래 핸들 (하단 중앙 배치)
+                bottomH.position.set(pivotX + curR, bY, egg.position.z);
+                
+                // 3. 가로 핸들 (오른쪽 중간 배치를 위해 좌표 수정)
+                // 에그 Geometry가 왼쪽 끝(X=0)에 맞춰져 있으므로 오른쪽 끝은 PivotX + 2*CurR
+                rightH.position.set(pivotX + (2 * curR), bY + (curH / 2), egg.position.z);
             }
-            renderer.render(scene, camera);
+            
+            if (renderer) renderer.render(scene, camera);
+            if (controls) controls.update();
         }
 
         window.onload = init;
