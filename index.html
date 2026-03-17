@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.5.3</title>
+    <title>Build-A-Crochet v5.5.4</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -16,7 +16,7 @@
         }
         .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; pointer-events: none; }
         .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; pointer-events: none; }
-        #canvas-container { flex-grow: 1; height: 100vh; position: relative; z-index: 1000; }
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; z-index: 1000; background: #fafafa; }
         #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 10px; color: #999; }
     </style>
 </head>
@@ -31,7 +31,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.5.3 (Bottom Scaling)</div>
+    <div id="v-info">v5.5.4 (Ultra Stable)</div>
 </div>
 
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
@@ -42,10 +42,9 @@
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
     
-    // Handles
-    let topScaleHandle = null;  // Blue (Top)
-    let bottomScaleHandle = null; // Cyan (Bottom)
-    let moveHandle = null;      // Green (Move)
+    let topScaleHandle = null;
+    let bottomScaleHandle = null;
+    let moveHandle = null;
     
     let isDraggingTop = false;
     let isDraggingBottom = false;
@@ -57,6 +56,7 @@
     function init() {
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0xffffff);
+        
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
         camera.position.set(40, 40, 80);
         
@@ -68,6 +68,7 @@
         let light = new THREE.DirectionalLight(0xffffff, 0.6);
         light.position.set(20, 40, 20);
         scene.add(light);
+        
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
@@ -99,7 +100,55 @@
 
         const handleGeo = new THREE.SphereGeometry(1.2, 16, 16);
         
-        // 1. Top Scale (Dark Blue)
         topScaleHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x007bff }));
-        // 2. Bottom Scale (Cyan/Light Blue)
         bottomScaleHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff }));
+        moveHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
+        
+        topScaleHandle.visible = bottomScaleHandle.visible = moveHandle.visible = false;
+        
+        scene.add(topScaleHandle);
+        scene.add(bottomScaleHandle);
+        scene.add(moveHandle);
+    }
+
+    function onPointerDown(event) {
+        updateMouseCoords(event);
+        raycaster.setFromCamera(mouse, camera);
+
+        if (moveHandle && moveHandle.visible) {
+            if (raycaster.intersectObject(moveHandle).length > 0) {
+                isDraggingMove = true; controls.enabled = false; prevMouseY = event.clientY; return;
+            }
+        }
+        if (topScaleHandle && topScaleHandle.visible) {
+            if (raycaster.intersectObject(topScaleHandle).length > 0) {
+                isDraggingTop = true; controls.enabled = false; prevMouseY = event.clientY; return;
+            }
+        }
+        if (bottomScaleHandle && bottomScaleHandle.visible) {
+            if (raycaster.intersectObject(bottomScaleHandle).length > 0) {
+                isDraggingBottom = true; controls.enabled = false; prevMouseY = event.clientY; return;
+            }
+        }
+
+        if (mainEgg) {
+            const hit = raycaster.intersectObject(mainEgg).length > 0;
+            if (topScaleHandle) topScaleHandle.visible = hit;
+            if (bottomScaleHandle) bottomScaleHandle.visible = hit;
+            if (moveHandle) moveHandle.visible = hit;
+        }
+    }
+
+    function onPointerMove(event) {
+        if (!mainEgg) return;
+        const dy = (prevMouseY - event.clientY);
+        prevMouseY = event.clientY;
+
+        if (isDraggingMove) {
+            mainEgg.position.y += dy * 0.05;
+        } else if (isDraggingTop) {
+            mainEgg.scale.y = Math.max(0.1, mainEgg.scale.y + dy * 0.01);
+        } else if (isDraggingBottom) {
+            const oldScaleY = mainEgg.scale.y;
+            const newScaleY = Math.max(0.1, oldScaleY - dy * 0.01);
+            const scaleDiff
