@@ -2,69 +2,141 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Recovery Mode v5.5.5</title>
+    <title>Build-A-Crochet v5.5.6</title>
     <style>
-        body { margin: 0; background: #222; color: white; overflow: hidden; display: flex; }
-        #panel { width: 80px; background: #333; display: flex; flex-direction: column; align-items: center; padding: 10px; z-index: 10; }
-        .btn { width: 50px; height: 50px; background: #ff69b4; border-radius: 10px; cursor: pointer; border: none; }
+        body { margin: 0; background: #222; color: white; overflow: hidden; display: flex; touch-action: none; }
+        #panel { width: 80px; background: #333; display: flex; flex-direction: column; align-items: center; padding: 10px; z-index: 10; border-right: 1px solid #444; }
+        .btn { width: 50px; height: 50px; background: #ff69b4; border-radius: 10px; cursor: pointer; border: 2px solid #fff; }
         #container { flex-grow: 1; height: 100vh; position: relative; }
-        #status { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 12px; }
+        #status { position: absolute; top: 10px; left: 10px; color: #0f0; font-family: monospace; font-size: 11px; pointer-events: none; }
     </style>
 </head>
 <body>
     <div id="panel">
         <button class="btn" onclick="spawn()"></button>
-        <p style="font-size: 10px;">SPAWN</p>
+        <p style="font-size: 10px; margin-top: 5px;">ADD EGG</p>
     </div>
     <div id="container">
-        <div id="status">System Initializing...</div>
+        <div id="status">Engine Ready v5.5.6</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
     <script>
-        let scene, camera, renderer, egg;
-        const status = document.getElementById('status');
+        let scene, camera, renderer, controls, egg = null;
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let topH, bottomH, moveH;
+        let dragTarget = null;
+        let prevY = 0;
+        const UNIT_H = 20; // 에그 기본 높이 기준
 
         function init() {
-            try {
-                scene = new THREE.Scene();
-                camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-                camera.position.set(30, 30, 30);
-                camera.lookAt(0, 0, 0);
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+            camera.position.set(40, 40, 40);
 
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth - 80, window.innerHeight);
-                document.getElementById('container').appendChild(renderer.domElement);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth - 80, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
 
-                const grid = new THREE.GridHelper(100, 20, 0x555555, 0x333333);
-                scene.add(grid);
-                scene.add(new THREE.AmbientLight(0xffffff, 1));
+            scene.add(new THREE.GridHelper(100, 20, 0x555555, 0x333333));
+            scene.add(new THREE.AmbientLight(0xffffff, 1));
 
-                status.innerText = "System Ready. Press Pink Button.";
-                animate();
-            } catch (e) {
-                status.style.color = "red";
-                status.innerText = "Init Error: " + e.message;
-            }
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            window.addEventListener('pointerdown', onDown);
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+            
+            animate();
         }
 
         window.spawn = function() {
-            try {
-                if (egg) return;
-                const geometry = new THREE.SphereGeometry(5, 32, 32);
-                const material = new THREE.MeshBasicMaterial({ color: 0xff69b4, wireframe: true });
-                egg = new THREE.Mesh(geometry, material);
-                scene.add(egg);
-                status.innerText = "Egg Spawned!";
-            } catch (e) {
-                status.style.color = "red";
-                status.innerText = "Spawn Error: " + e.message;
+            if (egg) return;
+            // 에그 생성 (LatheGeometry로 실제 에그 모양 구현)
+            const points = [];
+            for (let i = 0; i <= 20; i++) {
+                const t = i / 20;
+                const y = t * UNIT_H;
+                const r = 7 * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+                points.push(new THREE.Vector2(Math.max(0.1, r), y));
             }
+            const geo = new THREE.LatheGeometry(points, 32);
+            const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+            egg = new THREE.Mesh(geo, mat);
+            scene.add(egg);
+
+            // 핸들 생성
+            const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
+            topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); // 위 스케일
+            bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); // 아래 스케일
+            moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); // 이동
+            
+            topH.visible = bottomH.visible = moveH.visible = false;
+            scene.add(topH); scene.add(bottomH); scene.add(moveH);
+            
+            document.getElementById('status').innerText = "Egg Ready. Click the Egg!";
+        }
+
+        function onDown(e) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            if (egg) {
+                const hits = raycaster.intersectObjects([topH, bottomH, moveH, egg]);
+                if (hits.length > 0) {
+                    const obj = hits[0].object;
+                    if (obj === egg) {
+                        topH.visible = bottomH.visible = moveH.visible = true;
+                    } else {
+                        dragTarget = obj;
+                        controls.enabled = false;
+                        prevY = e.clientY;
+                    }
+                } else {
+                    topH.visible = bottomH.visible = moveH.visible = false;
+                }
+            }
+        }
+
+        function onMove(e) {
+            if (!dragTarget || !egg) return;
+            const dy = (prevY - e.clientY);
+            prevY = e.clientY;
+
+            if (dragTarget === moveH) {
+                egg.position.y += dy * 0.1;
+            } else if (dragTarget === topH) {
+                egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
+            } else if (dragTarget === bottomH) {
+                const oldS = egg.scale.y;
+                const newS = Math.max(0.1, oldS - dy * 0.01);
+                const diff = newS - oldS;
+                egg.scale.y = newS;
+                egg.position.y -= diff * UNIT_H; // 위쪽 고정 보정식
+            }
+        }
+
+        function onUp() {
+            dragTarget = null;
+            controls.enabled = true;
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            if (renderer && scene && camera) renderer.render(scene, camera);
+            if (egg && topH) {
+                const h = UNIT_H * egg.scale.y;
+                const bY = egg.position.y;
+                const tY = bY + h;
+                topH.position.set(egg.position.x, tY, egg.position.z);
+                moveH.position.set(egg.position.x, tY + 4, egg.position.z);
+                bottomH.position.set(egg.position.x, bY, egg.position.z);
+            }
+            renderer.render(scene, camera);
         }
 
         window.onload = init;
