@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.4.8</title>
+    <title>Build-A-Crochet v5.4.9</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
             width: 80px; height: 100vh; background: #f9f9f9; border-right: 2px solid #ff69b4;
-            display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 2000;
         }
         .item-box {
             width: 50px; height: 50px; background: #fff; border: 2px solid #ff69b4; border-radius: 10px;
             display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 15px;
+            position: relative;
         }
         .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; pointer-events: none; }
         .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; pointer-events: none; }
-        #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; z-index: 1000; }
         #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 9px; color: #ddd; }
     </style>
 </head>
@@ -24,14 +25,14 @@
 
 <div id="item-panel">
     <div class="item-label">LIBRARY</div>
-    <div class="item-box" id="eggButton">
+    <div class="item-box" onclick="addBody(event)">
         <div class="sphere-icon"></div>
     </div>
     <div class="item-label">BODY (Egg)</div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.4.8 (Smooth Scaling)</div>
+    <div id="v-info">v5.4.9 (Safe Button)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -64,11 +65,7 @@
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         
-        document.getElementById('eggButton').addEventListener('pointerdown', (e) => {
-            e.stopPropagation();
-            addBody();
-        });
-
+        // 캔버스 이벤트
         window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
@@ -76,7 +73,9 @@
         animate();
     }
 
-    function addBody() {
+    // 전역 함수로 선언하여 HTML onclick에서 접근 가능하게 함
+    window.addBody = function(event) {
+        if (event) event.stopPropagation(); // 버튼 클릭이 배경으로 전달되는 것 방지
         if (mainEgg) return;
 
         const points = [];
@@ -125,4 +124,38 @@
         }
     }
 
-    function onPointerMove(event
+    function onPointerMove(event) {
+        if (!isDragging || !mainEgg) return;
+
+        const deltaY = (prevMouseY - event.clientY) * 0.01;
+        prevMouseY = event.clientY;
+        mainEgg.scale.y = Math.max(0.1, mainEgg.scale.y + deltaY);
+    }
+
+    function onPointerUp() {
+        if (isDragging) {
+            if (topHandle) topHandle.material.color.set(0x007bff);
+            isDragging = false;
+            controls.enabled = true;
+        }
+    }
+
+    function updateMouseCoords(event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (mainEgg && topHandle) {
+            topHandle.position.set(0, INITIAL_HEIGHT * mainEgg.scale.y, 0);
+        }
+        if(controls) controls.update();
+        renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
