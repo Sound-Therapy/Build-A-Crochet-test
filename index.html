@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.3.0</title>
+    <title>Build-A-Crochet v5.4.0</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -17,7 +17,7 @@
         .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; }
         .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; }
         #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
-        #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 9px; color: #ddd; }
+        #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 9px; color: #bbb; }
     </style>
 </head>
 <body>
@@ -31,7 +31,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.3.0 (Interactive Selection)</div>
+    <div id="v-info">v5.4.0 (Drag to Scale)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -42,6 +42,9 @@
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
     let handles = [];
+    let selectedHandle = null;
+    let isDragging = false;
+    let previousMouseY = 0;
 
     function init() {
         scene = new THREE.Scene();
@@ -61,8 +64,9 @@
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         
-        // 클릭 이벤트 리스너 등록
         window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
         
         animate();
     }
@@ -82,26 +86,26 @@
         mainEgg = new THREE.Mesh(geometry, material);
         scene.add(mainEgg);
 
-        // 조절점(Handles) 생성
         createHandles();
-        setHandlesVisible(false); // 처음엔 숨김
+        setHandlesVisible(false);
     }
 
     function createHandles() {
-        const handleGeo = new THREE.SphereGeometry(0.8, 16, 16);
-        const handleMat = new THREE.MeshBasicMaterial({ color: 0x007bff }); // 파란색 점
+        const handleGeo = new THREE.SphereGeometry(1.2, 16, 16); // 크기 약간 키움
+        const handleMat = new THREE.MeshBasicMaterial({ color: 0x007bff });
 
         const positions = [
-            [0, 15, 0],  // 위
-            [0, -15, 0], // 아래
-            [8, 0, 0],   // 우
-            [-8, 0, 0]   // 좌
+            { pos: [0, 15, 0], type: 'y' },  // Top
+            { pos: [0, -15, 0], type: 'y' }, // Bottom
+            { pos: [10, 0, 0], type: 'x' },  // Right
+            { pos: [-10, 0, 0], type: 'x' }  // Left
         ];
 
-        positions.forEach(pos => {
-            const h = new THREE.Mesh(handleGeo, handleMat);
-            h.position.set(...pos);
-            mainEgg.add(h); // 에그의 자식으로 등록 (에그 움직이면 같이 움직임)
+        positions.forEach(config => {
+            const h = new THREE.Mesh(handleGeo, handleMat.clone());
+            h.position.set(...config.pos);
+            h.userData.type = config.type; // 핸들 타입 저장
+            mainEgg.add(h);
             handles.push(h);
         });
     }
@@ -111,21 +115,56 @@
     }
 
     function onPointerDown(event) {
-        // 마우스 좌표를 -1 ~ 1 사이로 변환 (Canvas 영역 기준)
+        updateMouseCoords(event);
+        raycaster.setFromCamera(mouse, camera);
+
+        // 1. 핸들 클릭 체크
+        const handleIntersects = raycaster.intersectObjects(handles);
+        if (handleIntersects.length > 0) {
+            selectedHandle = handleIntersects[0].object;
+            selectedHandle.material.color.set(0xffff00); // 드래그 중 노란색으로 변경
+            isDragging = true;
+            controls.enabled = false;
+            previousMouseY = event.clientY;
+            return;
+        }
+
+        // 2. 몸통 클릭 체크
+        const bodyIntersects = raycaster.intersectObject(mainEgg);
+        if (bodyIntersects.length > 0) {
+            setHandlesVisible(true);
+        } else {
+            setHandlesVisible(false);
+        }
+    }
+
+    function onPointerMove(event) {
+        if (!isDragging || !selectedHandle) return;
+
+        const deltaY = (previousMouseY - event.clientY) * 0.05;
+        previousMouseY = event.clientY;
+
+        if (selectedHandle.userData.type === 'y') {
+            mainEgg.scale.y = Math.max(0.2, mainEgg.scale.y + deltaY);
+        } else {
+            mainEgg.scale.x = Math.max(0.2, mainEgg.scale.x + deltaY);
+            mainEgg.scale.z = Math.max(0.2, mainEgg.scale.z + deltaY);
+        }
+    }
+
+    function onPointerUp() {
+        if (isDragging && selectedHandle) {
+            selectedHandle.material.color.set(0x007bff);
+        }
+        isDragging = false;
+        selectedHandle = null;
+        controls.enabled = true;
+    }
+
+    function updateMouseCoords(event) {
         const rect = renderer.domElement.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-
-        raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObject(mainEgg);
-
-        if (intersects.length > 0) {
-            setHandlesVisible(true); // 에그 클릭 시 보임
-            controls.enabled = false; // 조작 시 화면 회전 잠시 멈춤 (나중을 위해)
-            setTimeout(() => controls.enabled = true, 100);
-        } else {
-            setHandlesVisible(false); // 빈 공간 클릭 시 숨김
-        }
     }
 
     function animate() {
