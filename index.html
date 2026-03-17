@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.5.2</title>
+    <title>Build-A-Crochet v5.5.3</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -16,14 +16,11 @@
         }
         .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; pointer-events: none; }
         .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; pointer-events: none; }
-        #canvas-container { flex-grow: 1; height: 100vh; position: relative; z-index: 1000; background: #eee; }
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; z-index: 1000; }
         #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 10px; color: #999; }
-        #debug-log { position: absolute; top: 10px; left: 90px; color: red; font-size: 12px; z-index: 3000; }
     </style>
 </head>
 <body>
-
-<div id="debug-log"></div>
 
 <div id="item-panel">
     <div class="item-label">LIBRARY</div>
@@ -34,141 +31,75 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.5.2 (Engine Recovery)</div>
+    <div id="v-info">v5.5.3 (Bottom Scaling)</div>
 </div>
 
 <script src="https://unpkg.com/three@0.128.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    const log = document.getElementById('debug-log');
-    function showError(msg) { log.innerHTML += "<div>[Error] " + msg + "</div>"; }
-
     let scene, camera, renderer, controls, mainEgg = null;
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
-    let topHandle = null, moveHandle = null;
-    let isDraggingScale = false, isDraggingMove = false;
+    
+    // Handles
+    let topScaleHandle = null;  // Blue (Top)
+    let bottomScaleHandle = null; // Cyan (Bottom)
+    let moveHandle = null;      // Green (Move)
+    
+    let isDraggingTop = false;
+    let isDraggingBottom = false;
+    let isDraggingMove = false;
+    
     let prevMouseY = 0;
     const INITIAL_HEIGHT = 26;
 
     function init() {
-        try {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0xffffff);
-            
-            camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(40, 40, 80);
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth - 80, window.innerHeight);
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-            
-            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-            let light = new THREE.DirectionalLight(0xffffff, 0.6);
-            light.position.set(20, 40, 20);
-            scene.add(light);
-            
-            scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
-            
-            if (THREE.OrbitControls) {
-                controls = new THREE.OrbitControls(camera, renderer.domElement);
-            } else {
-                showError("OrbitControls missing");
-            }
-            
-            window.addEventListener('pointerdown', onPointerDown);
-            window.addEventListener('pointermove', onPointerMove);
-            window.addEventListener('pointerup', onPointerUp);
-            
-            animate();
-            console.log("v5.5.2 Ready");
-        } catch (e) {
-            showError(e.message);
-        }
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+        camera.position.set(40, 40, 80);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 80, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        let light = new THREE.DirectionalLight(0xffffff, 0.6);
+        light.position.set(20, 40, 20);
+        scene.add(light);
+        scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
+        
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        
+        window.addEventListener('pointerdown', onPointerDown);
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', onPointerUp);
+        
+        animate();
     }
 
     window.addBody = function(event) {
         if (event) event.stopPropagation();
         if (mainEgg) return;
 
-        try {
-            const points = [];
-            for (let i = 0; i <= 20; i++) {
-                const t = i / 20;
-                const y = t * INITIAL_HEIGHT; 
-                const r = (13.5 / 2) * Math.sqrt(Math.max(0, 1 - Math.pow((y - 13) / 13, 2)));
-                points.push(new THREE.Vector2(Math.max(0.1, r), y));
-            }
-            
-            const geometry = new THREE.LatheGeometry(points, 32);
-            const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
-            mainEgg = new THREE.Mesh(geometry, material);
-            scene.add(mainEgg);
-
-            const handleGeo = new THREE.SphereGeometry(1.2, 16, 16);
-            topHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x007bff }));
-            moveHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
-            
-            topHandle.visible = moveHandle.visible = false;
-            scene.add(topHandle);
-            scene.add(moveHandle);
-        } catch (e) {
-            showError("AddBody Error: " + e.message);
+        const points = [];
+        const radius = 13.5 / 2;
+        for (let i = 0; i <= 20; i++) {
+            const t = i / 20;
+            const y = t * INITIAL_HEIGHT; 
+            const r = radius * Math.sqrt(Math.max(0, 1 - Math.pow((y - 13) / 13, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
-    }
+        
+        const geometry = new THREE.LatheGeometry(points, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+        mainEgg = new THREE.Mesh(geometry, material);
+        scene.add(mainEgg);
 
-    function onPointerDown(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-
-        if (moveHandle && moveHandle.visible && raycaster.intersectObject(moveHandle).length > 0) {
-            isDraggingMove = true; controls.enabled = false; prevMouseY = event.clientY; return;
-        }
-        if (topHandle && topHandle.visible && raycaster.intersectObject(topHandle).length > 0) {
-            isDraggingScale = true; controls.enabled = false; prevMouseY = event.clientY; return;
-        }
-        if (mainEgg) {
-            const hit = raycaster.intersectObject(mainEgg).length > 0;
-            topHandle.visible = moveHandle.visible = hit;
-        }
-    }
-
-    function onPointerMove(event) {
-        if (!mainEgg) return;
-        const dy = (prevMouseY - event.clientY);
-        prevMouseY = event.clientY;
-
-        if (isDraggingMove) {
-            mainEgg.position.y += dy * 0.05;
-        } else if (isDraggingScale) {
-            mainEgg.scale.y = Math.max(0.1, mainEgg.scale.y + dy * 0.01);
-        }
-    }
-
-    function onPointerUp() {
-        isDraggingScale = isDraggingMove = false;
-        if(controls) controls.enabled = true;
-    }
-
-    function updateMouseCoords(event) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        if (mainEgg && topHandle && moveHandle) {
-            const topY = mainEgg.position.y + (INITIAL_HEIGHT * mainEgg.scale.y);
-            topHandle.position.set(mainEgg.position.x, topY, mainEgg.position.z);
-            moveHandle.position.set(mainEgg.position.x, topY + 4, mainEgg.position.z);
-        }
-        if(renderer) renderer.render(scene, camera);
-        if(controls) controls.update();
-    }
-
-    window.onload = init;
-</script>
-</body>
-</html>
+        const handleGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        
+        // 1. Top Scale (Dark Blue)
+        topScaleHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x007bff }));
+        // 2. Bottom Scale (Cyan/Light Blue)
+        bottomScaleHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff }));
