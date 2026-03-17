@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.4.0</title>
+    <title>Build-A-Crochet v5.4.1</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -31,7 +31,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.4.0 (Drag to Scale)</div>
+    <div id="v-info">v5.4.1 (One-Sided Scaling)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -45,6 +45,9 @@
     let selectedHandle = null;
     let isDragging = false;
     let previousMouseY = 0;
+    
+    // 초기 높이 값 저장 (계산용)
+    const INITIAL_Y_SIZE = 26; 
 
     function init() {
         scene = new THREE.Scene();
@@ -77,103 +80,10 @@
         const points = [];
         for (let i = 0; i <= 20; i++) {
             const t = i / 20;
-            const y = (t - 0.5) * 26;
+            const y = (t - 0.5) * INITIAL_Y_SIZE;
             const r = (13.5 / 2) * Math.sqrt(Math.max(0, 1 - Math.pow(y / 13, 2)));
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geometry = new THREE.LatheGeometry(points, 32);
         const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
-        mainEgg = new THREE.Mesh(geometry, material);
-        scene.add(mainEgg);
-
-        createHandles();
-        setHandlesVisible(false);
-    }
-
-    function createHandles() {
-        const handleGeo = new THREE.SphereGeometry(1.2, 16, 16); // 크기 약간 키움
-        const handleMat = new THREE.MeshBasicMaterial({ color: 0x007bff });
-
-        const positions = [
-            { pos: [0, 15, 0], type: 'y' },  // Top
-            { pos: [0, -15, 0], type: 'y' }, // Bottom
-            { pos: [10, 0, 0], type: 'x' },  // Right
-            { pos: [-10, 0, 0], type: 'x' }  // Left
-        ];
-
-        positions.forEach(config => {
-            const h = new THREE.Mesh(handleGeo, handleMat.clone());
-            h.position.set(...config.pos);
-            h.userData.type = config.type; // 핸들 타입 저장
-            mainEgg.add(h);
-            handles.push(h);
-        });
-    }
-
-    function setHandlesVisible(visible) {
-        handles.forEach(h => h.visible = visible);
-    }
-
-    function onPointerDown(event) {
-        updateMouseCoords(event);
-        raycaster.setFromCamera(mouse, camera);
-
-        // 1. 핸들 클릭 체크
-        const handleIntersects = raycaster.intersectObjects(handles);
-        if (handleIntersects.length > 0) {
-            selectedHandle = handleIntersects[0].object;
-            selectedHandle.material.color.set(0xffff00); // 드래그 중 노란색으로 변경
-            isDragging = true;
-            controls.enabled = false;
-            previousMouseY = event.clientY;
-            return;
-        }
-
-        // 2. 몸통 클릭 체크
-        const bodyIntersects = raycaster.intersectObject(mainEgg);
-        if (bodyIntersects.length > 0) {
-            setHandlesVisible(true);
-        } else {
-            setHandlesVisible(false);
-        }
-    }
-
-    function onPointerMove(event) {
-        if (!isDragging || !selectedHandle) return;
-
-        const deltaY = (previousMouseY - event.clientY) * 0.05;
-        previousMouseY = event.clientY;
-
-        if (selectedHandle.userData.type === 'y') {
-            mainEgg.scale.y = Math.max(0.2, mainEgg.scale.y + deltaY);
-        } else {
-            mainEgg.scale.x = Math.max(0.2, mainEgg.scale.x + deltaY);
-            mainEgg.scale.z = Math.max(0.2, mainEgg.scale.z + deltaY);
-        }
-    }
-
-    function onPointerUp() {
-        if (isDragging && selectedHandle) {
-            selectedHandle.material.color.set(0x007bff);
-        }
-        isDragging = false;
-        selectedHandle = null;
-        controls.enabled = true;
-    }
-
-    function updateMouseCoords(event) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        if(controls) controls.update();
-        renderer.render(scene, camera);
-    }
-
-    window.onload = init;
-</script>
-</body>
-</html>
+        mainEgg = new
