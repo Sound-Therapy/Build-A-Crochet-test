@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.4.7</title>
+    <title>Build-A-Crochet v5.4.8</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -31,7 +31,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.4.7 (Stable Creation)</div>
+    <div id="v-info">v5.4.8 (Smooth Scaling)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -64,13 +64,11 @@
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         
-        // 버튼 이벤트 바인딩
         document.getElementById('eggButton').addEventListener('pointerdown', (e) => {
             e.stopPropagation();
             addBody();
         });
 
-        // 윈도우 이벤트
         window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
@@ -100,15 +98,12 @@
         topHandle = new THREE.Mesh(handleGeo, handleMat);
         topHandle.visible = false;
         scene.add(topHandle);
-        
-        console.log("Egg Created");
     }
 
     function onPointerDown(event) {
         updateMouseCoords(event);
         raycaster.setFromCamera(mouse, camera);
 
-        // 1. 핸들 드래그 체크 (존재할 때만)
         if (topHandle && topHandle.visible) {
             const intersects = raycaster.intersectObject(topHandle);
             if (intersects.length > 0) {
@@ -120,7 +115,6 @@
             }
         }
 
-        // 2. 몸통 클릭 체크 (존재할 때만)
         if (mainEgg) {
             const intersects = raycaster.intersectObject(mainEgg);
             if (intersects.length > 0) {
@@ -131,38 +125,4 @@
         }
     }
 
-    function onPointerMove(event) {
-        if (!isDragging || !mainEgg) return;
-
-        const deltaY = (prevMouseY - event.clientY) * 0.05;
-        prevMouseY = event.clientY;
-        mainEgg.scale.y = Math.max(0.1, mainEgg.scale.y + deltaY);
-    }
-
-    function onPointerUp() {
-        if (isDragging) {
-            if (topHandle) topHandle.material.color.set(0x007bff);
-            isDragging = false;
-            controls.enabled = true;
-        }
-    }
-
-    function updateMouseCoords(event) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-    }
-
-    function animate() {
-        requestAnimationFrame(animate);
-        if (mainEgg && topHandle) {
-            topHandle.position.set(0, INITIAL_HEIGHT * mainEgg.scale.y, 0);
-        }
-        if(controls) controls.update();
-        renderer.render(scene, camera);
-    }
-
-    window.onload = init;
-</script>
-</body>
-</html>
+    function onPointerMove(event
