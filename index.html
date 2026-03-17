@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.5.0</title>
+    <title>Build-A-Crochet v5.5.1</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -31,18 +31,128 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.5.0 (Scale & Move)</div>
+    <div id="v-info">v5.5.1 (Safety First)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, mainEgg;
+    let scene, camera, renderer, controls, mainEgg = null;
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
-    let topHandle = null;  // Scale (Blue)
-    let moveHandle = null; // Move (Green)
+    let topHandle = null;
+    let moveHandle = null;
     let isDraggingScale = false;
     let isDraggingMove = false;
-    let prevMouseY =
+    let prevMouseY = 0;
+    const INITIAL_HEIGHT = 26;
+
+    function init() {
+        try {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xffffff);
+            camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+            camera.position.set(30, 30, 60);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth - 80, window.innerHeight);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            let light = new THREE.DirectionalLight(0xffffff, 0.6);
+            light.position.set(10, 20, 10);
+            scene.add(light);
+            
+            // 그리드 생성 (이게 보여야 엔진이 정상 작동하는 것)
+            const grid = new THREE.GridHelper(100, 20, 0xeeeeee, 0xf5f5f5);
+            scene.add(grid);
+            
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            
+            window.addEventListener('pointerdown', onPointerDown);
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+            
+            animate();
+            console.log("Engine Started");
+        } catch (e) {
+            console.error("Init Error:", e);
+        }
+    }
+
+    window.addBody = function(event) {
+        if (event) event.stopPropagation();
+        if (mainEgg) return;
+
+        const points = [];
+        const radius = 13.5 / 2;
+        for (let i = 0; i <= 20; i++) {
+            const t = i / 20;
+            const y = t * INITIAL_HEIGHT; 
+            const r = radius * Math.sqrt(Math.max(0, 1 - Math.pow((y - 13) / 13, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
+        }
+        
+        const geometry = new THREE.LatheGeometry(points, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+        mainEgg = new THREE.Mesh(geometry, material);
+        scene.add(mainEgg);
+
+        const handleGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        
+        topHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x007bff }));
+        topHandle.visible = false;
+        scene.add(topHandle);
+
+        moveHandle = new THREE.Mesh(handleGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
+        moveHandle.visible = false;
+        scene.add(moveHandle);
+        
+        console.log("Egg & Handles Added");
+    }
+
+    function onPointerDown(event) {
+        updateMouseCoords(event);
+        raycaster.setFromCamera(mouse, camera);
+
+        if (moveHandle && moveHandle.visible) {
+            if (raycaster.intersectObject(moveHandle).length > 0) {
+                isDraggingMove = true;
+                controls.enabled = false;
+                prevMouseY = event.clientY;
+                return;
+            }
+        }
+
+        if (topHandle && topHandle.visible) {
+            if (raycaster.intersectObject(topHandle).length > 0) {
+                isDraggingScale = true;
+                controls.enabled = false;
+                prevMouseY = event.clientY;
+                return;
+            }
+        }
+
+        if (mainEgg) {
+            const intersects = raycaster.intersectObject(mainEgg);
+            if (intersects.length > 0) {
+                if(topHandle) topHandle.visible = true;
+                if(moveHandle) moveHandle.visible = true;
+            } else {
+                if(topHandle) topHandle.visible = false;
+                if(moveHandle) moveHandle.visible = false;
+            }
+        }
+    }
+
+    function onPointerMove(event) {
+        if (!mainEgg) return;
+
+        const deltaY = (prevMouseY - event.clientY) * 0.05;
+        const deltaScaleY = (prevMouseY - event.clientY) * 0.01;
+        prevMouseY = event.clientY;
+
+        if (isDraggingMove) {
+            mainEgg.position.y += deltaY;
+        } else if (isDraggingScale) {
