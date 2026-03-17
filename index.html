@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Build-A-Crochet Workshop v5.1.0</title>
+    <style>
+        body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
+        
+        /* 왼쪽 아이템 패널 */
+        #item-panel {
+            width: 80px; height: 100vh; background: #f9f9f9; border-right: 2px solid #ff69b4;
+            display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 1000;
+        }
+        .item-box {
+            width: 50px; height: 50px; background: #fff; border: 2px dashed #ccc; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 15px;
+            transition: 0.2s;
+        }
+        .item-box:active { transform: scale(0.9); border-color: #ff69b4; }
+        .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; }
+        .sphere-icon { width: 30px; height: 30px; background: #333; border-radius: 50%; }
+
+        /* 메인 캔버스 영역 */
+        #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
+        
+        /* 기존 상단 바 (v4.4.4 스타일 유지) */
+        #top-bar { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 60px;
+            background: rgba(255, 255, 255, 0.8); display: flex; align-items: center; 
+            justify-content: center; z-index: 900; pointer-events: none;
+        }
+        #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 9px; color: #ddd; }
+    </style>
+</head>
+<body>
+
+<div id="item-panel">
+    <div class="item-label">LIBRARY</div>
+    <div class="item-box" onclick="addSphere()">
+        <div class="sphere-icon"></div>
+    </div>
+    <div class="item-label">SPHERE</div>
+</div>
+
+<div id="canvas-container">
+    <div id="top-bar" style="font-weight: bold; color: #ff69b4; font-size: 12px;">Build-A-Crochet Workshop</div>
+    <div id="v-info">v5.1.0 (Stable Base v4.4.4)</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+    let scene, camera, renderer, controls, mainEgg;
+    let extraParts = []; // 새로 추가된 공들을 담는 바구니
+
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff);
+        
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+        camera.position.set(30, 30, 60);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 80, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const light = new THREE.PointLight(0xffffff, 1);
+        light.position.set(20, 30, 20);
+        scene.add(light);
+        scene.add(new THREE.GridHelper(100, 20, 0xeeeeee, 0xf5f5f5));
+        
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // v4.4.4의 기본 에그 생성
+        createMainEgg();
+        animate();
+    }
+
+    function createMainEgg() {
+        const points = [];
+        for (let i = 0; i <= 20; i++) {
+            const t = i / 20;
+            const y = (t - 0.5) * 26; // 높이 26 고정
+            const r = (13.5 / 2) * Math.sqrt(Math.max(0, 1 - Math.pow(y / 13, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
+        }
+        const geometry = new THREE.LatheGeometry(points, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+        mainEgg = new THREE.Mesh(geometry, material);
+        scene.add(mainEgg);
+    }
+
+    // [핵심 전진] 새로운 공을 추가하는 함수
+    window.addSphere = function() {
+        const geo = new THREE.SphereGeometry(3, 24, 24); // 반지름 3인 공
+        const mat = new THREE.MeshPhongMaterial({ color: 0x333333 }); // 검은색 (눈 후보)
+        const newSphere = new THREE.Mesh(geo, mat);
+        
+        // 겹치지 않게 약간 랜덤한 위치에 소환
+        newSphere.position.set(Math.random() * 10 - 5, 10, 5); 
+        
+        scene.add(newSphere);
+        extraParts.push(newSphere);
+        console.log("New sphere added! Total parts:", extraParts.length);
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+
+    // 화면 크기 조정 대응
+    window.onresize = function() {
+        camera.aspect = (window.innerWidth - 80) / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth - 80, window.innerHeight);
+    };
+</script>
+</body>
+</html>
