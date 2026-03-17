@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Build-A-Crochet v5.4.5</title>
+    <title>Build-A-Crochet v5.4.7</title>
     <style>
         body { margin: 0; font-family: sans-serif; overflow: hidden; background: #ffffff; touch-action: none; display: flex; }
         #item-panel {
@@ -11,11 +11,11 @@
             display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 1000;
         }
         .item-box {
-            width: 50px; height: 50px; background: #fff; border: 2px dashed #ccc; border-radius: 10px;
+            width: 50px; height: 50px; background: #fff; border: 2px solid #ff69b4; border-radius: 10px;
             display: flex; align-items: center; justify-content: center; cursor: pointer; margin-bottom: 15px;
         }
-        .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; }
-        .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; }
+        .sphere-icon { width: 30px; height: 30px; background: #ff69b4; border-radius: 50%; pointer-events: none; }
+        .item-label { font-size: 9px; color: #ff69b4; font-weight: bold; pointer-events: none; }
         #canvas-container { flex-grow: 1; height: 100vh; position: relative; }
         #v-info { position: absolute; bottom: 10px; right: 10px; font-size: 9px; color: #ddd; }
     </style>
@@ -24,14 +24,14 @@
 
 <div id="item-panel">
     <div class="item-label">LIBRARY</div>
-    <div class="item-box" onclick="addBody()">
+    <div class="item-box" id="eggButton">
         <div class="sphere-icon"></div>
     </div>
     <div class="item-label">BODY (Egg)</div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-info">v5.4.5 (Top Handle Scaling)</div>
+    <div id="v-info">v5.4.7 (Stable Creation)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -41,10 +41,10 @@
     let scene, camera, renderer, controls, mainEgg;
     let raycaster = new THREE.Raycaster();
     let mouse = new THREE.Vector2();
-    let handles = [];
-    let selectedHandle = null;
+    let topHandle = null;
     let isDragging = false;
     let prevMouseY = 0;
+    const INITIAL_HEIGHT = 26;
 
     function init() {
         scene = new THREE.Scene();
@@ -64,7 +64,13 @@
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         
-        // 이벤트 리스너 등록
+        // 버튼 이벤트 바인딩
+        document.getElementById('eggButton').addEventListener('pointerdown', (e) => {
+            e.stopPropagation();
+            addBody();
+        });
+
+        // 윈도우 이벤트
         window.addEventListener('pointerdown', onPointerDown);
         window.addEventListener('pointermove', onPointerMove);
         window.addEventListener('pointerup', onPointerUp);
@@ -72,14 +78,91 @@
         animate();
     }
 
-    window.addBody = function() {
+    function addBody() {
         if (mainEgg) return;
 
         const points = [];
-        const height = 26;
         const radius = 13.5 / 2;
-
         for (let i = 0; i <= 20; i++) {
             const t = i / 20;
-            const y = t * height; 
-            const r = radius * Math.sqrt(Math
+            const y = t * INITIAL_HEIGHT; 
+            const r = radius * Math.sqrt(Math.max(0, 1 - Math.pow((y - 13) / 13, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
+        }
+        
+        const geometry = new THREE.LatheGeometry(points, 32);
+        const material = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true });
+        mainEgg = new THREE.Mesh(geometry, material);
+        scene.add(mainEgg);
+
+        const handleGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        const handleMat = new THREE.MeshBasicMaterial({ color: 0x007bff });
+        topHandle = new THREE.Mesh(handleGeo, handleMat);
+        topHandle.visible = false;
+        scene.add(topHandle);
+        
+        console.log("Egg Created");
+    }
+
+    function onPointerDown(event) {
+        updateMouseCoords(event);
+        raycaster.setFromCamera(mouse, camera);
+
+        // 1. 핸들 드래그 체크 (존재할 때만)
+        if (topHandle && topHandle.visible) {
+            const intersects = raycaster.intersectObject(topHandle);
+            if (intersects.length > 0) {
+                isDragging = true;
+                topHandle.material.color.set(0xffff00);
+                controls.enabled = false;
+                prevMouseY = event.clientY;
+                return;
+            }
+        }
+
+        // 2. 몸통 클릭 체크 (존재할 때만)
+        if (mainEgg) {
+            const intersects = raycaster.intersectObject(mainEgg);
+            if (intersects.length > 0) {
+                topHandle.visible = true;
+            } else {
+                topHandle.visible = false;
+            }
+        }
+    }
+
+    function onPointerMove(event) {
+        if (!isDragging || !mainEgg) return;
+
+        const deltaY = (prevMouseY - event.clientY) * 0.05;
+        prevMouseY = event.clientY;
+        mainEgg.scale.y = Math.max(0.1, mainEgg.scale.y + deltaY);
+    }
+
+    function onPointerUp() {
+        if (isDragging) {
+            if (topHandle) topHandle.material.color.set(0x007bff);
+            isDragging = false;
+            controls.enabled = true;
+        }
+    }
+
+    function updateMouseCoords(event) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if (mainEgg && topHandle) {
+            topHandle.position.set(0, INITIAL_HEIGHT * mainEgg.scale.y, 0);
+        }
+        if(controls) controls.update();
+        renderer.render(scene, camera);
+    }
+
+    window.onload = init;
+</script>
+</body>
+</html>
