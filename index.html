@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.8.8</title>
+    <title>Build-A-Crochet v5.8.9</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -23,7 +23,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.8.8</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.8.9</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="changeColor('#ffffff')"></div>
@@ -128,7 +128,9 @@
                 dragTarget = obj; controls.enabled = false;
                 startRotation.copy(currentEgg.quaternion);
                 const screenPos = dragTarget.position.clone().project(camera);
-                startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
+                const centerX = rect.left + (1 + screenPos.x) * rect.width / 2;
+                const centerY = rect.top + (1 - screenPos.y) * rect.height / 2;
+                startMouseAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
             } else { selectEgg(obj); }
         } else if (!e.target.classList.contains('color-dot')) { deselectAll(); }
     }
@@ -150,20 +152,33 @@
             const centerX = rect.left + (1 + screenPos.x) * rect.width / 2;
             const centerY = rect.top + (1 - screenPos.y) * rect.height / 2;
             const currentAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
-            const deltaAngle = currentAngle - startMouseAngle;
+            let deltaAngle = currentAngle - startMouseAngle;
 
-            // 💡 v5.8.8 핵심: 시각적 방향 보정
-            // 에그의 현재 상태와 상관없이 '화면에서의 회전'을 로컬 축 회전에 반영
-            const axis = new THREE.Vector3();
-            if (dragTarget === rotX_H) axis.set(1, 0, 0);
-            else if (dragTarget === rotY_H) axis.set(0, 1, 0);
-            else if (dragTarget === rotZ_H) axis.set(0, 0, 1);
+            const localAxis = new THREE.Vector3();
+            if (dragTarget === rotX_H) localAxis.set(1, 0, 0);
+            else if (dragTarget === rotY_H) localAxis.set(0, 1, 0);
+            else if (dragTarget === rotZ_H) localAxis.set(0, 0, 1);
 
-            const q = new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle);
+            // 💡 v5.8.9 핵심: 카메라 방향과 로컬 축의 내적을 통한 방향 보정
+            const worldAxis = localAxis.clone().applyQuaternion(currentEgg.quaternion);
+            const camDir = new THREE.Vector3();
+            camera.getWorldDirection(camDir);
+            
+            // 축이 카메라를 등지고 있는지 마주보고 있는지 판별하여 회전 방향 역전
+            if (worldAxis.dot(camDir) > 0) deltaAngle *= -1;
+
+            const q = new THREE.Quaternion().setFromAxisAngle(localAxis, -deltaAngle);
             currentEgg.quaternion.multiplyQuaternions(startRotation, q);
         } else {
-            // Translation logic (moveX, moveV, moveZ)
-            // Simplified for brevity
+            // 위치 이동 (moveX, moveV, moveZ)
+            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+            let intersect = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -currentEgg.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate())), intersect)) {
+                if (dragTarget === moveV) currentEgg.position.y = intersect.y - 15;
+                if (dragTarget === moveX) currentEgg.position.x = intersect.x - 15;
+                if (dragTarget === moveZ) currentEgg.position.z = intersect.z - 15;
+            }
         }
     }
 
@@ -171,8 +186,9 @@
         requestAnimationFrame(animate);
         if (currentEgg && moveV) {
             const p = currentEgg.position;
-            [moveV, moveX, moveZ].forEach(h => h.position.copy(p));
-            moveV.position.y += 15; moveX.position.x += 15; moveZ.position.z += 15;
+            moveV.position.set(p.x, p.y + 15, p.z);
+            moveX.position.set(p.x + 15, p.y, p.z);
+            moveZ.position.set(p.x, p.y, p.z + 15);
             [rotX_H, rotY_H, rotZ_H].forEach(r => {
                 r.position.copy(p); r.quaternion.copy(currentEgg.quaternion);
                 if (r === rotX_H) r.rotateY(Math.PI / 2);
