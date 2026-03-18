@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.11.0</title>
+    <title>Build-A-Crochet v5.12.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -10,15 +10,9 @@
         .egg-btn { background: #ff69b4; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
         .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.6); }
         .undo-btn { background: #555; color: white; }
-        
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; }
-        #palette { 
-            position: absolute; top: 20px; right: 20px; 
-            background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; 
-            display: none; grid-template-columns: repeat(7, 1fr); gap: 10px; 
-            border: 1px solid #ccc; z-index: 300; 
-        }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(7, 1fr); gap: 10px; border: 1px solid #ccc; z-index: 300; }
         .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
     </style>
 </head>
@@ -31,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.11.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.12.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -60,7 +54,7 @@
     let topH, bottomH, leftH, rightH, frontH, backH;
     let history = [];
     let startRotation = new THREE.Quaternion(), startMouseAngle = 0;
-    let dragStartOffset = new THREE.Vector3();
+    let startScale = new THREE.Vector3(), startPos = new THREE.Vector3();
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7;
 
@@ -77,7 +71,7 @@
         createGhost(); createHandles();
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', onUp);
+        window.addEventListener('pointerup', () => { dragTarget = null; controls.enabled = true; });
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) undo();
             if ((e.key === 'Delete' || e.key === 'Backspace') && currentEgg) { saveState(); scene.remove(currentEgg); deselectAll(); }
@@ -186,6 +180,8 @@
             if (interactables.includes(obj)) {
                 saveState(); dragTarget = obj; controls.enabled = false;
                 startRotation.copy(currentEgg.quaternion);
+                startScale.copy(currentEgg.scale);
+                startPos.copy(currentEgg.position);
                 const screenPos = dragTarget.position.clone().project(camera);
                 startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
             } else { selectEgg(obj); }
@@ -194,18 +190,12 @@
 
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        if (isPlacementMode) {
-            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-            let intersect = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; }
-            return;
-        }
         if (!dragTarget || !currentEgg) return;
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
         if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
+            // Rotation Logic (v5.8.9)
             const screenPos = dragTarget.position.clone().project(camera);
             const centerX = rect.left + (1 + screenPos.x) * rect.width / 2;
             const centerY = rect.top + (1 - screenPos.y) * rect.height / 2;
@@ -220,34 +210,70 @@
         } else {
             let intersect = new THREE.Vector3();
             const planeNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
-            const plane = new THREE.Plane(planeNormal, -currentEgg.position.dot(planeNormal));
+            const plane = new THREE.Plane(planeNormal, -dragTarget.position.dot(planeNormal));
             if (raycaster.ray.intersectPlane(plane, intersect)) {
-                const s = currentEgg.scale, p = currentEgg.position;
-                if (dragTarget === moveV) p.y = intersect.y;
-                else if (dragTarget === moveX) p.x = intersect.x;
-                else if (dragTarget === moveZ) p.z = intersect.z;
-                // Scale Logic
-                else if (dragTarget === topH) s.y = Math.max(0.1, (intersect.y - p.y) / 10);
-                else if (dragTarget === rightH) s.x = Math.max(0.1, (intersect.x - p.x) / 7);
-                else if (dragTarget === frontH) s.z = Math.max(0.1, (intersect.z - p.z) / 7);
+                const diff = intersect.clone().sub(dragTarget.position);
+                // 에그의 로컬 축으로 변환
+                const localDiff = diff.clone().applyQuaternion(currentEgg.quaternion.clone().invert());
+                
+                if (dragTarget === moveV || dragTarget === moveX || dragTarget === moveZ) {
+                    currentEgg.position.add(diff);
+                } else {
+                    // 💡 v5.12.0 핵심: 앵커 기반 독립 스케일링
+                    if (dragTarget === topH) {
+                        const deltaS = localDiff.y / BASE_H;
+                        currentEgg.scale.y = Math.max(0.1, startScale.y + deltaS);
+                        const moveLocal = new THREE.Vector3(0, (currentEgg.scale.y - startScale.y) * BASE_H / 2, 0);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    } else if (dragTarget === bottomH) {
+                        const deltaS = -localDiff.y / BASE_H;
+                        currentEgg.scale.y = Math.max(0.1, startScale.y + deltaS);
+                        const moveLocal = new THREE.Vector3(0, -(currentEgg.scale.y - startScale.y) * BASE_H / 2, 0);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    } else if (dragTarget === rightH) {
+                        const deltaS = localDiff.x / (BASE_R * 2);
+                        currentEgg.scale.x = Math.max(0.1, startScale.x + deltaS);
+                        const moveLocal = new THREE.Vector3((currentEgg.scale.x - startScale.x) * BASE_R, 0, 0);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    } else if (dragTarget === leftH) {
+                        const deltaS = -localDiff.x / (BASE_R * 2);
+                        currentEgg.scale.x = Math.max(0.1, startScale.x + deltaS);
+                        const moveLocal = new THREE.Vector3(-(currentEgg.scale.x - startScale.x) * BASE_R, 0, 0);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    } else if (dragTarget === frontH) {
+                        const deltaS = localDiff.z / (BASE_R * 2);
+                        currentEgg.scale.z = Math.max(0.1, startScale.z + deltaS);
+                        const moveLocal = new THREE.Vector3(0, 0, (currentEgg.scale.z - startScale.z) * BASE_R);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    } else if (dragTarget === backH) {
+                        const deltaS = -localDiff.z / (BASE_R * 2);
+                        currentEgg.scale.z = Math.max(0.1, startScale.z + deltaS);
+                        const moveLocal = new THREE.Vector3(0, 0, -(currentEgg.scale.z - startScale.z) * BASE_R);
+                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
+                    }
+                }
             }
         }
     }
-
-    function onUp() { dragTarget = null; controls.enabled = true; }
 
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg && moveV) {
             const p = currentEgg.position, s = currentEgg.scale;
-            moveV.position.set(p.x, p.y + 15 * s.y, p.z);
-            moveX.position.set(p.x + 15 * s.x, p.y, p.z);
-            moveZ.position.set(p.x, p.y, p.z + 15 * s.z);
-            topH.position.set(p.x, p.y + 10 * s.y, p.z); bottomH.position.set(p.x, p.y - 10 * s.y, p.z);
-            rightH.position.set(p.x + 7 * s.x, p.y, p.z); leftH.position.set(p.x - 7 * s.x, p.y, p.z);
-            frontH.position.set(p.x, p.y, p.z + 7 * s.z); backH.position.set(p.x, p.y, p.z - 7 * s.z);
+            const q = currentEgg.quaternion;
+            
+            const updateH = (h, ox, oy, oz) => {
+                const vec = new THREE.Vector3(ox, oy, oz).applyQuaternion(q);
+                h.position.copy(p).add(vec);
+            };
+
+            updateH(moveV, 0, 15 * s.y, 0); updateH(moveX, 15 * s.x, 0, 0); updateH(moveZ, 0, 0, 15 * s.z);
+            updateH(topH, 0, 10 * s.y, 0); updateH(bottomH, 0, -10 * s.y, 0);
+            updateH(rightH, 7 * s.x, 0, 0); updateH(leftH, -7 * s.x, 0, 0);
+            updateH(frontH, 0, 0, 7 * s.z); updateH(backH, 0, 0, -7 * s.z);
+
             [rotX_H, rotY_H, rotZ_H].forEach(r => {
-                r.position.copy(p); r.quaternion.copy(currentEgg.quaternion);
+                r.position.copy(p); r.quaternion.copy(q);
                 if (r === rotX_H) r.rotateY(Math.PI / 2); if (r === rotY_H) r.rotateX(Math.PI / 2);
             });
         }
