@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.18.0 - Stability Alpha</title>
+    <title>Build-A-Crochet v5.19.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -11,10 +11,10 @@
         .egg-btn.active { background: #28a745; box-shadow: 0 0 20px rgba(40,167,69,0.8); }
         .undo-btn { background: #333; color: white; }
         #canvas-container { flex-grow: 1; position: relative; }
-        #debug-info { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.7); color: #0f0; padding: 5px 10px; font-size: 10px; pointer-events: none; border-radius: 4px; }
-        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; }
-        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(7, 1fr); gap: 10px; border: 1px solid #ccc; z-index: 300; }
-        .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(2, 1fr); gap: 8px; border: 1px solid #ccc; z-index: 300; max-height: 80vh; overflow-y: auto; }
+        .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); transition: transform 0.1s; }
+        .color-dot:hover { transform: scale(1.1); border-color: #555; }
     </style>
 </head>
 <body>
@@ -26,13 +26,21 @@
 </div>
 
 <div id="canvas-container">
-    <div id="debug-info">History: 0 | Mode: Neutral</div>
-    <div id="v-tag">Build-A-Crochet Engine v5.18.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.19.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
+        <div class="color-dot" style="background: #ff1493;" onclick="updateColor('#ff1493')"></div>
+        <div class="color-dot" style="background: #9c27b0;" onclick="updateColor('#9c27b0')"></div>
+        <div class="color-dot" style="background: #673ab7;" onclick="updateColor('#673ab7')"></div>
+        <div class="color-dot" style="background: #3f51b5;" onclick="updateColor('#3f51b5')"></div>
         <div class="color-dot" style="background: #2196f3;" onclick="updateColor('#2196f3')"></div>
+        <div class="color-dot" style="background: #00bcd4;" onclick="updateColor('#00bcd4')"></div>
         <div class="color-dot" style="background: #4caf50;" onclick="updateColor('#4caf50')"></div>
+        <div class="color-dot" style="background: #8bc34a;" onclick="updateColor('#8bc34a')"></div>
         <div class="color-dot" style="background: #ffeb3b;" onclick="updateColor('#ffeb3b')"></div>
+        <div class="color-dot" style="background: #ff9800;" onclick="updateColor('#ff9800')"></div>
+        <div class="color-dot" style="background: #ff5722;" onclick="updateColor('#ff5722')"></div>
+        <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
         <div class="color-dot" style="background: #000000;" onclick="updateColor('#000000')"></div>
     </div>
 </div>
@@ -46,7 +54,6 @@
     let moveV, moveX, moveZ, rotX_H, rotY_H, rotZ_H;
     let topH, bottomH, leftH, rightH, frontH, backH;
     
-    // 💡 State Management
     let history = [];
     const MAX_HISTORY = 50;
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -74,10 +81,6 @@
         window.addEventListener('pointerup', onUp);
         
         animate();
-    }
-
-    function updateDebug() {
-        document.getElementById('debug-info').innerText = `History: ${history.length} | Mode: ${isPlacementMode ? 'PLACEMENT' : (dragTarget ? 'EDITING' : 'NEUTRAL')}`;
     }
 
     function createEggMesh(color, isGhost = false) {
@@ -113,11 +116,9 @@
         scene.add(ghostEgg);
     }
 
-    // 💡 핵심: 씬의 완벽한 텍스트 박제 (Deep Snapshot)
     function captureState() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
         const state = eggs.map(egg => ({
-            id: egg.id, // ID를 추적하여 가급적 유지
             pos: { x: egg.position.x, y: egg.position.y, z: egg.position.z },
             rot: { x: egg.quaternion.x, y: egg.quaternion.y, z: egg.quaternion.z, w: egg.quaternion.w },
             scl: { x: egg.scale.x, y: egg.scale.y, z: egg.scale.z },
@@ -129,31 +130,24 @@
         
         history.push(json);
         if (history.length > MAX_HISTORY) history.shift();
-        updateDebug();
     }
 
     window.executeUndo = function() {
         if (history.length <= 1) {
-            // 기록이 하나뿐이면 그 상태(첫 에그 생성 직후)를 강제 유지
             if (history.length === 1) applyState(JSON.parse(history[0]));
             return;
         }
-        
-        history.pop(); // 현재 '망가진/원치않는' 상태 제거
-        const prevState = JSON.parse(history[history.length - 1]);
-        applyState(prevState);
-        updateDebug();
+        history.pop();
+        applyState(JSON.parse(history[history.length - 1]));
     };
 
     function applyState(stateData) {
-        // 1. 기존 에그 싹 제거 (확실한 초기화)
         scene.children.filter(o => o.userData.isEgg).forEach(o => {
             o.geometry.dispose();
             o.material.dispose();
             scene.remove(o);
         });
 
-        // 2. 저장된 데이터 기반으로 에그 재생성
         stateData.forEach(d => {
             const egg = createEggMesh(new THREE.Color(d.col));
             egg.position.set(d.pos.x, d.pos.y, d.pos.z);
@@ -168,7 +162,6 @@
         isPlacementMode = !isPlacementMode;
         document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode);
         ghostEgg.visible = isPlacementMode;
-        updateDebug();
     }
 
     function spawnEgg(pos) {
@@ -176,8 +169,7 @@
         egg.position.copy(pos); 
         egg.position.y += 10;
         scene.add(egg);
-        
-        captureState(); // 생성 즉시 상태 저장
+        captureState();
         selectEgg(egg);
         togglePlacementMode();
     }
@@ -228,14 +220,11 @@
             const obj = hits[0].object;
             if (interactables.includes(obj)) {
                 dragTarget = obj; controls.enabled = false; isDragging = true;
-                startRotation = currentEgg.quaternion.clone(); 
-                startScale = currentEgg.scale.clone(); 
-                startPos = currentEgg.position.clone();
+                startRotation = currentEgg.quaternion.clone(); startScale = currentEgg.scale.clone(); startPos = currentEgg.position.clone();
                 const screenPos = dragTarget.position.clone().project(camera);
                 startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
             } else { selectEgg(obj); }
         } else if (!e.target.classList.contains('color-dot') && !e.target.classList.contains('btn')) { deselectAll(); }
-        updateDebug();
     }
 
     function onMove(e) {
@@ -249,11 +238,8 @@
                 ghostEgg.position.copy(intersect); ghostEgg.position.y += 10;
                 ghostEgg.visible = true;
             }
-            return;
         }
-
         if (!dragTarget || !currentEgg) return;
-
         if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
             const screenPos = dragTarget.position.clone().project(camera);
             const centerX = rect.left + (1 + screenPos.x) * rect.width / 2;
@@ -262,8 +248,7 @@
             let deltaAngle = currentAngle - startMouseAngle;
             const axis = new THREE.Vector3();
             if (dragTarget === rotX_H) axis.set(1, 0, 0); else if (dragTarget === rotY_H) axis.set(0, 1, 0); else axis.set(0, 0, 1);
-            const worldAxis = axis.clone().applyQuaternion(currentEgg.quaternion);
-            if (worldAxis.dot(camera.getWorldDirection(new THREE.Vector3()).negate()) < 0) deltaAngle *= -1;
+            if (axis.clone().applyQuaternion(currentEgg.quaternion).dot(camera.getWorldDirection(new THREE.Vector3()).negate()) < 0) deltaAngle *= -1;
             currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle));
         } else {
             let intersect = new THREE.Vector3();
@@ -285,11 +270,7 @@
         }
     }
 
-    function onUp() { 
-        if (isDragging) { captureState(); isDragging = false; }
-        dragTarget = null; controls.enabled = true; 
-        updateDebug();
-    }
+    function onUp() { if (isDragging) { captureState(); isDragging = false; } dragTarget = null; controls.enabled = true; }
 
     function animate() {
         requestAnimationFrame(animate);
@@ -302,8 +283,7 @@
             upH(frontH, 0, 0, 7*s.z); upH(backH, 0, 0, -7*s.z);
             [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if (r === rotX_H) r.rotateY(Math.PI/2); if (r === rotY_H) r.rotateX(Math.PI/2); });
         }
-        renderer.render(scene, camera); 
-        controls.update();
+        renderer.render(scene, camera); controls.update();
     }
     window.onload = init;
 </script>
