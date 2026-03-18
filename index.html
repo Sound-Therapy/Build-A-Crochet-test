@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.8.9</title>
+    <title>Build-A-Crochet v5.10.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -11,7 +11,12 @@
         .egg-btn.active::after { content: 'ON'; position: absolute; top: 10px; left: 10px; color: #fff; font-weight: bold; font-size: 10px; }
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; }
-        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(6, 1fr); gap: 10px; border: 1px solid #ccc; z-index: 300; }
+        #palette { 
+            position: absolute; top: 20px; right: 20px; 
+            background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; 
+            display: none; grid-template-columns: repeat(7, 1fr); gap: 10px; 
+            border: 1px solid #ccc; z-index: 300; box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+        }
         .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
     </style>
 </head>
@@ -23,9 +28,20 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.8.9</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.10.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
+        <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
+        <div class="color-dot" style="background: #9c27b0;" onclick="changeColor('#9c27b0')"></div>
+        <div class="color-dot" style="background: #673ab7;" onclick="changeColor('#673ab7')"></div>
+        <div class="color-dot" style="background: #3f51b5;" onclick="changeColor('#3f51b5')"></div>
+        <div class="color-dot" style="background: #2196f3;" onclick="changeColor('#2196f3')"></div>
+        <div class="color-dot" style="background: #00bcd4;" onclick="changeColor('#00bcd4')"></div>
+        <div class="color-dot" style="background: #4caf50;" onclick="changeColor('#4caf50')"></div>
+        <div class="color-dot" style="background: #ffeb3b;" onclick="changeColor('#ffeb3b')"></div>
+        <div class="color-dot" style="background: #ff9800;" onclick="changeColor('#ff9800')"></div>
+        <div class="color-dot" style="background: #ff5722;" onclick="changeColor('#ff5722')"></div>
+        <div class="color-dot" style="background: #795548;" onclick="changeColor('#795548')"></div>
         <div class="color-dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="changeColor('#ffffff')"></div>
         <div class="color-dot" style="background: #000000;" onclick="changeColor('#000000')"></div>
     </div>
@@ -159,25 +175,22 @@
             else if (dragTarget === rotY_H) localAxis.set(0, 1, 0);
             else if (dragTarget === rotZ_H) localAxis.set(0, 0, 1);
 
-            // 💡 v5.8.9 핵심: 카메라 방향과 로컬 축의 내적을 통한 방향 보정
             const worldAxis = localAxis.clone().applyQuaternion(currentEgg.quaternion);
             const camDir = new THREE.Vector3();
             camera.getWorldDirection(camDir);
             
-            // 축이 카메라를 등지고 있는지 마주보고 있는지 판별하여 회전 방향 역전
             if (worldAxis.dot(camDir) > 0) deltaAngle *= -1;
 
             const q = new THREE.Quaternion().setFromAxisAngle(localAxis, -deltaAngle);
             currentEgg.quaternion.multiplyQuaternions(startRotation, q);
         } else {
-            // 위치 이동 (moveX, moveV, moveZ)
             const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
             const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
             let intersect = new THREE.Vector3();
             if (raycaster.ray.intersectPlane(new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -currentEgg.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate())), intersect)) {
-                if (dragTarget === moveV) currentEgg.position.y = intersect.y - 15;
-                if (dragTarget === moveX) currentEgg.position.x = intersect.x - 15;
-                if (dragTarget === moveZ) currentEgg.position.z = intersect.z - 15;
+                if (dragTarget === moveV) currentEgg.position.y = intersect.y;
+                if (dragTarget === moveX) currentEgg.position.x = intersect.x;
+                if (dragTarget === moveZ) currentEgg.position.z = intersect.z;
             }
         }
     }
