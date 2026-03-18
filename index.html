@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.8</title>
+    <title>Build-A-Crochet v5.6.9</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -19,14 +19,15 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.6.8</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.6.9</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, egg, frontH;
+    let scene, camera, renderer, controls, egg;
+    let topH, bottomH, moveH, rightH, leftH, frontH;
     let dragTarget = null;
     let plane = new THREE.Plane();
     let planeIntersect = new THREE.Vector3();
@@ -38,7 +39,7 @@
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111111);
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-        camera.position.set(40, 30, 60); // 핸들이 잘 보이도록 약간 대각선 뷰
+        camera.position.set(40, 30, 60);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
@@ -53,7 +54,6 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        
         animate();
     }
 
@@ -67,19 +67,29 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        
-        // Z축 조작을 위해 Pivot을 뒷면(-BASE_R)에 고정
-        geo.translate(0, 0, BASE_R); 
+        geo.translate(BASE_R, 0, BASE_R); // Pivot: Left-Back
         
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
-        egg.position.set(0, 0, -BASE_R); // 그리드 중심 정렬
+        egg.position.set(-BASE_R, 0, -BASE_R); // Center
         scene.add(egg);
 
-        const hGeo = new THREE.SphereGeometry(1.5, 16, 16);
-        frontH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0xffff00 })); // Yellow
-        frontH.visible = true;
-        scene.add(frontH);
+        const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        const makeH = (col) => {
+            const m = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: col }));
+            m.visible = false;
+            scene.add(m);
+            return m;
+        };
+
+        topH = makeH(0x007bff);    // 상
+        bottomH = makeH(0x00d4ff); // 하
+        moveH = makeH(0x28a745);   // 이동
+        rightH = makeH(0x0056b3);  // 우
+        leftH = makeH(0x00ffff);   // 좌
+        frontH = makeH(0xffff00);  // 전 (노란색)
+
+        document.getElementById('v-tag').innerText += " - Ready";
     };
 
     function onDown(e) {
@@ -88,14 +98,24 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        if (frontH && raycaster.intersectObject(frontH).length > 0) {
-            dragTarget = frontH;
-            controls.enabled = false;
-
-            // 바닥 평면(XZ) 기준으로 전후 조작 계산
-            plane.setFromNormalAndCoplanarPoint(new THREE.Vector3(0, 1, 0), dragTarget.position);
-            raycaster.ray.intersectPlane(plane, planeIntersect);
-            dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
+        const targets = [topH, bottomH, moveH, rightH, leftH, frontH, egg];
+        const hits = raycaster.intersectObjects(targets.filter(o => o && (o.visible || o === egg)));
+        
+        if (hits.length > 0) {
+            const obj = hits[0].object;
+            if (obj === egg) {
+                [topH, bottomH, moveH, rightH, leftH, frontH].forEach(h => h.visible = true);
+            } else {
+                dragTarget = obj;
+                controls.enabled = false;
+                // 평면 설정: 상하 조작은 정면 평면(XY), 좌우전후는 바닥 평면(XZ)
+                const normal = (dragTarget === topH || dragTarget === bottomH || dragTarget === moveH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+                plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
+                raycaster.ray.intersectPlane(plane, planeIntersect);
+                dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
+            }
+        } else {
+            [topH, bottomH, moveH, rightH, leftH, frontH].forEach(h => h.visible = false);
         }
     }
 
@@ -107,34 +127,47 @@
         raycaster.setFromCamera(mouse, camera);
 
         if (raycaster.ray.intersectPlane(plane, planeIntersect)) {
-            const targetPos = planeIntersect.sub(dragStartOffset);
+            const pos = planeIntersect.sub(dragStartOffset);
             
-            // 뒷면 고정 기준, 앞쪽으로의 거리 계산
-            const backEdgeZ = egg.position.z;
-            const currentDepth = targetPos.z - backEdgeZ;
-            
-            // 스케일 적용 (최소 0.1)
-            egg.scale.z = Math.max(0.1, currentDepth / (BASE_R * 2));
+            if (dragTarget === moveH) {
+                egg.position.y = pos.y - (BASE_H * egg.scale.y + 4);
+            } else if (dragTarget === topH) {
+                egg.scale.y = Math.max(0.1, (pos.y - egg.position.y) / BASE_H);
+            } else if (dragTarget === bottomH) {
+                const oldTopY = egg.position.y + (BASE_H * egg.scale.y);
+                egg.position.y = pos.y;
+                egg.scale.y = Math.max(0.1, (oldTopY - pos.y) / BASE_H);
+            } else if (dragTarget === rightH) {
+                egg.scale.x = Math.max(0.1, (pos.x - egg.position.x) / (BASE_R * 2));
+            } else if (dragTarget === leftH) {
+                const oldRightX = egg.position.x + (BASE_R * 2 * egg.scale.x);
+                egg.position.x = pos.x;
+                egg.scale.x = Math.max(0.1, (oldRightX - pos.x) / (BASE_R * 2));
+            } else if (dragTarget === frontH) {
+                egg.scale.z = Math.max(0.1, (pos.z - egg.position.z) / (BASE_R * 2));
+            }
         }
     }
 
-    function onUp() {
-        dragTarget = null;
-        controls.enabled = true;
-    }
+    function onUp() { dragTarget = null; controls.enabled = true; }
 
     function animate() {
         requestAnimationFrame(animate);
-        if (egg && frontH) {
-            const curZ = (BASE_R * 2) * egg.scale.z;
-            const backZ = egg.position.z;
-            // 노란 점을 에그의 앞면 끝에 동기화
-            frontH.position.set(egg.position.x, egg.position.y + 10, backZ + curZ);
+        if (egg && topH) {
+            const curH = BASE_H * egg.scale.y, curW = (BASE_R * 2) * egg.scale.x, curD = (BASE_R * 2) * egg.scale.z;
+            const bY = egg.position.y, tY = bY + curH, lX = egg.position.x, bZ = egg.position.z;
+            const midX = lX + curW/2, midZ = bZ + curD/2;
+
+            topH.position.set(midX, tY, midZ);
+            moveH.position.set(midX, tY + 4, midZ);
+            bottomH.position.set(midX, bY, midZ);
+            rightH.position.set(lX + curW, bY + curH/2, midZ);
+            leftH.position.set(lX, bY + curH/2, midZ);
+            frontH.position.set(midX, bY + curH/2, bZ + curD);
         }
         renderer.render(scene, camera);
         controls.update();
     }
-
     window.onload = init;
 </script>
 </body>
