@@ -2,13 +2,26 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.5</title>
+    <title>Build-A-Crochet v5.7.6</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #777; font-size: 12px; font-weight: bold; z-index: 200; }
+        
+        /* 팔레트 스타일 */
+        #palette { 
+            position: absolute; top: 20px; right: 20px; 
+            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 15px; 
+            display: none; grid-template-columns: repeat(3, 1fr); gap: 8px;
+            border: 1px solid #444; z-index: 300;
+        }
+        .color-dot { 
+            width: 30px; height: 30px; border-radius: 50%; cursor: pointer; 
+            border: 2px solid transparent; transition: transform 0.2s;
+        }
+        .color-dot:hover { transform: scale(1.2); border-color: white; }
     </style>
 </head>
 <body>
@@ -19,7 +32,15 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.5</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.6</div>
+    <div id="palette">
+        <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
+        <div class="color-dot" style="background: #ff4500;" onclick="changeColor('#ff4500')"></div>
+        <div class="color-dot" style="background: #ffd700;" onclick="changeColor('#ffd700')"></div>
+        <div class="color-dot" style="background: #00ced1;" onclick="changeColor('#00ced1')"></div>
+        <div class="color-dot" style="background: #9370db;" onclick="changeColor('#9370db')"></div>
+        <div class="color-dot" style="background: #ffffff;" onclick="changeColor('#ffffff')"></div>
+    </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -96,18 +117,14 @@
         topH = makeH(0x007bff);    bottomH = makeH(0x00d4ff); 
         leftH = makeH(0x00ffff);   rightH = makeH(0x0056b3);  
         frontH = makeH(0xffff00);  backH = makeH(0xffa500);   
-
         rotX_H = createRing('x', 0xff0000); 
         rotY_H = createRing('y', 0x00ff00); 
         rotZ_H = createRing('z', 0x0000ff);
     };
 
-    function getMouseAngle(e) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        const centerX = rect.left + rect.width / 2;
-        const centerY = rect.top + rect.height / 2;
-        return Math.atan2(e.clientY - centerY, e.clientX - centerX);
-    }
+    window.changeColor = function(colorStr) {
+        if (egg) egg.material.color.set(colorStr);
+    };
 
     function onDown(e) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -122,22 +139,23 @@
             const obj = hits[0].object;
             if (obj === egg) {
                 allHandles.forEach(h => h.visible = true);
+                document.getElementById('palette').style.display = 'grid'; // 팔레트 표시
             } else {
                 dragTarget = obj;
                 controls.enabled = false;
                 startRotation.copy(egg.quaternion);
-                
                 const normal = (dragTarget === topH || dragTarget === bottomH || dragTarget === moveH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
                 plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
-                
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
-                
-                // 회전 시작 기준 각도 저장
-                startMouseAngle = getMouseAngle(e);
+                startMouseAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
             }
         } else {
-            allHandles.forEach(h => h.visible = false);
+            // 빈 공간 클릭 시 UI 숨김 (팔레트 포함)
+            if (!e.target.classList.contains('color-dot')) {
+                allHandles.forEach(h => h.visible = false);
+                document.getElementById('palette').style.display = 'none';
+            }
         }
     }
 
@@ -150,45 +168,42 @@
 
         if (raycaster.ray.intersectPlane(plane, planeIntersect)) {
             const pos = planeIntersect.sub(dragStartOffset);
-            
             if (dragTarget === moveH) {
                 egg.position.copy(pos.clone().sub(new THREE.Vector3(0, (BASE_H * egg.scale.y)/2 + 5, 0)));
             } else if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
-                // 💡 부호 반전(-)으로 마우스 드래그 방향과 동기화
-                const currentAngle = getMouseAngle(e);
+                const currentAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
                 const deltaAngle = -(currentAngle - startMouseAngle); 
-                
                 const axis = new THREE.Vector3();
                 if (dragTarget === rotX_H) axis.set(1, 0, 0);
                 else if (dragTarget === rotY_H) axis.set(0, 1, 0);
                 else if (dragTarget === rotZ_H) axis.set(0, 0, 1);
-                
                 const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAngle);
                 egg.quaternion.multiplyQuaternions(q, startRotation);
             } else {
                 // 앵커 스케일 로직
+                const curH = BASE_H * egg.scale.y, curW = BASE_R * 2 * egg.scale.x, curD = BASE_R * 2 * egg.scale.z;
                 if (dragTarget === topH) {
-                    const bottomY = egg.position.y - (BASE_H * egg.scale.y)/2;
+                    const bottomY = egg.position.y - curH/2;
                     egg.scale.y = Math.max(0.1, (pos.y - bottomY) / BASE_H);
                     egg.position.y = bottomY + (BASE_H * egg.scale.y)/2;
                 } else if (dragTarget === bottomH) {
-                    const topY = egg.position.y + (BASE_H * egg.scale.y)/2;
+                    const topY = egg.position.y + curH/2;
                     egg.scale.y = Math.max(0.1, (topY - pos.y) / BASE_H);
                     egg.position.y = topY - (BASE_H * egg.scale.y)/2;
                 } else if (dragTarget === rightH) {
-                    const leftX = egg.position.x - (BASE_R * 2 * egg.scale.x)/2;
+                    const leftX = egg.position.x - curW/2;
                     egg.scale.x = Math.max(0.1, (pos.x - leftX) / (BASE_R * 2));
                     egg.position.x = leftX + (BASE_R * 2 * egg.scale.x)/2;
                 } else if (dragTarget === leftH) {
-                    const rightX = egg.position.x + (BASE_R * 2 * egg.scale.x)/2;
+                    const rightX = egg.position.x + curW/2;
                     egg.scale.x = Math.max(0.1, (rightX - pos.x) / (BASE_R * 2));
                     egg.position.x = rightX - (BASE_R * 2 * egg.scale.x)/2;
                 } else if (dragTarget === frontH) {
-                    const backZ = egg.position.z - (BASE_R * 2 * egg.scale.z)/2;
+                    const backZ = egg.position.z - curD/2;
                     egg.scale.z = Math.max(0.1, (pos.z - backZ) / (BASE_R * 2));
                     egg.position.z = backZ + (BASE_R * 2 * egg.scale.z)/2;
                 } else if (dragTarget === backH) {
-                    const frontZ = egg.position.z + (BASE_R * 2 * egg.scale.z)/2;
+                    const frontZ = egg.position.z + curD/2;
                     egg.scale.z = Math.max(0.1, (frontZ - pos.z) / (BASE_R * 2));
                     egg.position.z = frontZ - (BASE_R * 2 * egg.scale.z)/2;
                 }
@@ -203,7 +218,6 @@
         if (egg && moveH) {
             const curHY = (BASE_H * egg.scale.y)/2, curWX = (BASE_R * 2 * egg.scale.x)/2, curDZ = (BASE_R * 2 * egg.scale.z)/2;
             const center = egg.position;
-            
             moveH.position.set(center.x, center.y + curHY + 5, center.z);
             topH.position.set(center.x, center.y + curHY, center.z);
             bottomH.position.set(center.x, center.y - curHY, center.z);
