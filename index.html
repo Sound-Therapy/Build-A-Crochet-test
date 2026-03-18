@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.8</title>
+    <title>Build-A-Crochet v5.7.9</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -32,7 +32,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.8</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.9</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -59,8 +59,9 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, egg, outline; // outline 변수 추가
-    let moveH, topH, bottomH, leftH, rightH, frontH, backH;
+    let scene, camera, renderer, controls, egg, outline;
+    let moveV, moveH_axis; // 수직 이동(V), 수평 이동(H) 핸들
+    let topH, bottomH, leftH, rightH, frontH, backH;
     let rotX_H, rotY_H, rotZ_H;
     let dragTarget = null;
     let plane = new THREE.Plane();
@@ -95,7 +96,7 @@
 
     function createRing(axis, color) {
         const geometry = new THREE.TorusGeometry(22, 0.2, 16, 64);
-        const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5 }); 
+        const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4 });
         const ring = new THREE.Mesh(geometry, material);
         if (axis === 'x') ring.rotation.y = Math.PI / 2;
         if (axis === 'y') ring.rotation.x = Math.PI / 2;
@@ -116,16 +117,14 @@
         const geo = new THREE.LatheGeometry(points, 32);
         geo.translate(0, -10, 0); 
         
-        // 에그 본체 (원하는 색상)
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.7 });
         egg = new THREE.Mesh(geo, mat);
         scene.add(egg);
 
-        // 💡 얇은 검은 테두리 (외곽선) 시스템 추가
-        const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }); // 뒷면만 렌더링
+        const outlineMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide });
         outline = new THREE.Mesh(geo, outlineMat);
-        outline.scale.multiplyScalar(1.02); // 에그보다 2% 더 크게 설정
-        egg.add(outline); // 에그에 자식으로 추가하여 함께 움직이도록 설정
+        outline.scale.multiplyScalar(1.02);
+        egg.add(outline);
 
         const hGeo = new THREE.SphereGeometry(1.3, 16, 16);
         const makeH = (col) => {
@@ -133,7 +132,10 @@
             m.visible = false; scene.add(m); return m;
         };
 
-        moveH = makeH(0x28a745); 
+        // 이동 핸들 분리
+        moveV = makeH(0x28a745); // 정수리 초록점 (Y축)
+        moveH_axis = makeH(0xff0000); // 우측 빨간점 (X축)
+
         topH = makeH(0x007bff);    bottomH = makeH(0x00d4ff); 
         leftH = makeH(0x00ffff);   rightH = makeH(0x0056b3);  
         frontH = makeH(0xffff00);  backH = makeH(0xffa500);   
@@ -152,26 +154,29 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        const allHandles = [moveH, topH, bottomH, leftH, rightH, frontH, backH, rotX_H, rotY_H, rotZ_H];
+        const allHandles = [moveV, moveH_axis, topH, bottomH, leftH, rightH, frontH, backH, rotX_H, rotY_H, rotZ_H];
         const hits = raycaster.intersectObjects([egg, ...allHandles].filter(o => o && (o.visible || o === egg)));
         
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (obj === egg) {
                 allHandles.forEach(h => h.visible = true);
-                document.getElementById('palette').style.display = 'grid'; // 팔레트 표시
+                document.getElementById('palette').style.display = 'grid';
             } else {
                 dragTarget = obj;
                 controls.enabled = false;
                 startRotation.copy(egg.quaternion);
-                const normal = (dragTarget === topH || dragTarget === bottomH || dragTarget === moveH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+                
+                // 이동/스케일에 따른 적절한 평면 설정
+                let normal = new THREE.Vector3(0, 0, 1);
+                if (dragTarget === moveH_axis || dragTarget === rightH || dragTarget === leftH) normal.set(0, 1, 0);
+                
                 plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
                 startMouseAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
             }
         } else {
-            // 빈 공간 클릭 시 UI 숨김 (팔레트 포함)
             if (!e.target.classList.contains('color-dot')) {
                 allHandles.forEach(h => h.visible = false);
                 document.getElementById('palette').style.display = 'none';
@@ -188,8 +193,13 @@
 
         if (raycaster.ray.intersectPlane(plane, planeIntersect)) {
             const pos = planeIntersect.sub(dragStartOffset);
-            if (dragTarget === moveH) {
-                egg.position.copy(pos.clone().sub(new THREE.Vector3(0, (BASE_H * egg.scale.y)/2 + 5, 0)));
+            
+            if (dragTarget === moveV) {
+                // 수직 이동: 오직 Y축만 변경
+                egg.position.y = pos.y - ((BASE_H * egg.scale.y)/2 + 5);
+            } else if (dragTarget === moveH_axis) {
+                // 수평 이동: 오직 X축만 변경
+                egg.position.x = pos.x - ((BASE_R * 2 * egg.scale.x)/2 + 5);
             } else if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
                 const currentAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
                 const deltaAngle = -(currentAngle - startMouseAngle); 
@@ -235,10 +245,15 @@
 
     function animate() {
         requestAnimationFrame(animate);
-        if (egg && moveH) {
+        if (egg && moveV) {
             const curHY = (BASE_H * egg.scale.y)/2, curWX = (BASE_R * 2 * egg.scale.x)/2, curDZ = (BASE_R * 2 * egg.scale.z)/2;
             const center = egg.position;
-            moveH.position.set(center.x, center.y + curHY + 5, center.z);
+            
+            // 수직 이동 핸들 (초록색)
+            moveV.position.set(center.x, center.y + curHY + 5, center.z);
+            // 수평 이동 핸들 (빨간색 - 우측 스케일 점 옆)
+            moveH_axis.position.set(center.x + curWX + 5, center.y, center.z);
+
             topH.position.set(center.x, center.y + curHY, center.z);
             bottomH.position.set(center.x, center.y - curHY, center.z);
             rightH.position.set(center.x + curWX, center.y, center.z);
