@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.1</title>
+    <title>Build-A-Crochet v5.7.2</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
-        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #888; font-size: 12px; font-weight: bold; z-index: 200; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #555; font-size: 12px; font-weight: bold; z-index: 200; }
     </style>
 </head>
 <body>
@@ -19,7 +19,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.1</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.2</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -27,19 +27,21 @@
 
 <script>
     let scene, camera, renderer, controls, egg;
-    let topH, bottomH, moveH, rightH, leftH, frontH, backH;
+    let moveH, rotX_H, rotY_H, rotZ_H;
     let dragTarget = null;
     let plane = new THREE.Plane();
     let planeIntersect = new THREE.Vector3();
     let dragStartOffset = new THREE.Vector3();
-    
+    let startRotation = new THREE.Quaternion();
+    let startMouseAngle = 0;
+
     const BASE_H = 20, BASE_R = 7;
 
     function init() {
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111111);
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-        camera.position.set(50, 40, 70);
+        camera.position.set(60, 50, 80);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
@@ -57,38 +59,39 @@
         animate();
     }
 
+    function createRing(axis, color) {
+        const geometry = new THREE.TorusGeometry(15, 0.4, 16, 64, Math.PI);
+        const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
+        const ring = new THREE.Mesh(geometry, material);
+        if (axis === 'x') ring.rotation.y = Math.PI / 2;
+        if (axis === 'y') ring.rotation.x = Math.PI / 2;
+        ring.visible = false;
+        scene.add(ring);
+        return ring;
+    }
+
     window.handleSpawn = function() {
         if (egg) return;
         const points = [];
         for (let i = 0; i <= 20; i++) {
             const t = i / 20;
-            const y = t * BASE_H;
-            const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+            const y = (t - 0.5) * BASE_H;
+            const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow(y / (BASE_H/2), 2)));
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        geo.translate(BASE_R, 0, BASE_R);
-        
-        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
+        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.7 });
         egg = new THREE.Mesh(geo, mat);
-        egg.position.set(-BASE_R, 0, -BASE_R);
         scene.add(egg);
 
-        const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
-        const makeH = (col) => {
-            const m = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: col }));
-            m.visible = false;
-            scene.add(m);
-            return m;
-        };
+        const hGeo = new THREE.SphereGeometry(1.5, 16, 16);
+        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
+        moveH.visible = false;
+        scene.add(moveH);
 
-        topH = makeH(0x007bff);    
-        bottomH = makeH(0x00d4ff); 
-        moveH = makeH(0x28a745);   // 초록색 (이동)
-        rightH = makeH(0x0056b3);  
-        leftH = makeH(0x00ffff);   
-        frontH = makeH(0xffff00);  
-        backH = makeH(0xffa500);   
+        rotX_H = createRing('x', 0xff0000); // Red: X-axis
+        rotY_H = createRing('y', 0x00ff00); // Green: Y-axis
+        rotZ_H = createRing('z', 0x0000ff); // Blue: Z-axis
     };
 
     function onDown(e) {
@@ -97,32 +100,29 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        const targets = [topH, bottomH, moveH, rightH, leftH, frontH, backH, egg];
-        const hits = raycaster.intersectObjects(targets.filter(o => o && (o.visible || o === egg)));
+        const hits = raycaster.intersectObjects([egg, moveH, rotX_H, rotY_H, rotZ_H].filter(o => o && (o.visible || o === egg)));
         
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (obj === egg) {
-                [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = true);
+                [moveH, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
             } else {
                 dragTarget = obj;
                 controls.enabled = false;
+                startRotation.copy(egg.quaternion);
                 
-                // 이동 핸들(moveH)일 경우 카메라를 바라보는 수직 평면을 생성하여 3D 이동 대응
-                if (dragTarget === moveH) {
-                    const vector = new THREE.Vector3();
-                    camera.getWorldDirection(vector);
-                    plane.setFromNormalAndCoplanarPoint(vector, dragTarget.position);
-                } else {
-                    const normal = (dragTarget === topH || dragTarget === bottomH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
-                    plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
-                }
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                plane.setFromNormalAndCoplanarPoint(camDir, dragTarget.position);
                 
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
+                
+                // 회전 시작 각도 기록 (단순 스크린 좌표 기준)
+                startMouseAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
             }
         } else {
-            [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = false);
+            [moveH, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
         }
     }
 
@@ -137,33 +137,19 @@
             const pos = planeIntersect.sub(dragStartOffset);
             
             if (dragTarget === moveH) {
-                // 💡 핵심: X, Y, Z 모든 좌표를 업데이트하여 자유 이동 구현
-                // 핸들의 상대적 위치(상단 + 4)를 고려하여 에그 본체 위치 보정
-                const curH = BASE_H * egg.scale.y;
-                const curW = (BASE_R * 2) * egg.scale.x;
-                const curD = (BASE_R * 2) * egg.scale.z;
+                egg.position.copy(pos.clone().sub(new THREE.Vector3(0, BASE_H/2 + 4, 0)));
+            } else {
+                // 회전 로직: 마우스의 회전량을 각도로 변환
+                const currentAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
+                const deltaAngle = currentAngle - startMouseAngle;
                 
-                egg.position.x = pos.x - (curW / 2);
-                egg.position.y = pos.y - (curH + 4);
-                egg.position.z = pos.z - (curD / 2);
-            } else if (dragTarget === topH) {
-                egg.scale.y = Math.max(0.1, (pos.y - egg.position.y) / BASE_H);
-            } else if (dragTarget === bottomH) {
-                const oldTopY = egg.position.y + (BASE_H * egg.scale.y);
-                egg.position.y = pos.y;
-                egg.scale.y = Math.max(0.1, (oldTopY - pos.y) / BASE_H);
-            } else if (dragTarget === rightH) {
-                egg.scale.x = Math.max(0.1, (pos.x - egg.position.x) / (BASE_R * 2));
-            } else if (dragTarget === leftH) {
-                const oldRightX = egg.position.x + (BASE_R * 2 * egg.scale.x);
-                egg.position.x = pos.x;
-                egg.scale.x = Math.max(0.1, (oldRightX - pos.x) / (BASE_R * 2));
-            } else if (dragTarget === frontH) {
-                egg.scale.z = Math.max(0.1, (pos.z - egg.position.z) / (BASE_R * 2));
-            } else if (dragTarget === backH) {
-                const oldFrontZ = egg.position.z + (BASE_R * 2 * egg.scale.z);
-                egg.position.z = pos.z;
-                egg.scale.z = Math.max(0.1, (oldFrontZ - pos.z) / (BASE_R * 2));
+                const axis = new THREE.Vector3();
+                if (dragTarget === rotX_H) axis.set(1, 0, 0);
+                else if (dragTarget === rotY_H) axis.set(0, 1, 0);
+                else if (dragTarget === rotZ_H) axis.set(0, 0, 1);
+                
+                const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAngle);
+                egg.quaternion.multiplyQuaternions(q, startRotation);
             }
         }
     }
@@ -172,18 +158,10 @@
 
     function animate() {
         requestAnimationFrame(animate);
-        if (egg && topH) {
-            const curH = BASE_H * egg.scale.y, curW = (BASE_R * 2) * egg.scale.x, curD = (BASE_R * 2) * egg.scale.z;
-            const bY = egg.position.y, tY = bY + curH, lX = egg.position.x, bZ = egg.position.z;
-            const midX = lX + curW/2, midZ = bZ + curD/2;
-
-            topH.position.set(midX, tY, midZ);
-            moveH.position.set(midX, tY + 4, midZ);
-            bottomH.position.set(midX, bY, midZ);
-            rightH.position.set(lX + curW, bY + curH/2, midZ);
-            leftH.position.set(lX, bY + curH/2, midZ);
-            frontH.position.set(midX, bY + curH/2, bZ + curD);
-            backH.position.set(midX, bY + curH/2, bZ);
+        if (egg && moveH) {
+            const center = egg.position.clone();
+            moveH.position.copy(center).add(new THREE.Vector3(0, BASE_H/2 + 4, 0));
+            [rotX_H, rotY_H, rotZ_H].forEach(r => r.position.copy(center));
         }
         renderer.render(scene, camera);
         controls.update();
