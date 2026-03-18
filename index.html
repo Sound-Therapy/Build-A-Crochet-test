@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.9</title>
+    <title>Build-A-Crochet v5.8.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -32,7 +32,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.9</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.8.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -60,7 +60,7 @@
 
 <script>
     let scene, camera, renderer, controls, egg, outline;
-    let moveV, moveH_axis; // 수직 이동(V), 수평 이동(H) 핸들
+    let moveV, moveX, moveZ; // 이동 핸들 3개
     let topH, bottomH, leftH, rightH, frontH, backH;
     let rotX_H, rotY_H, rotZ_H;
     let dragTarget = null;
@@ -132,13 +132,14 @@
             m.visible = false; scene.add(m); return m;
         };
 
-        // 이동 핸들 분리
-        moveV = makeH(0x28a745); // 정수리 초록점 (Y축)
-        moveH_axis = makeH(0xff0000); // 우측 빨간점 (X축)
+        // 이동 핸들 3형제
+        moveV = makeH(0x28a745);     // Y축 (Green)
+        moveX = makeH(0xff0000);     // X축 (Red)
+        moveZ = makeH(0x0000ff);     // Z축 (Blue) - 노란점 앞
 
-        topH = makeH(0x007bff);    bottomH = makeH(0x00d4ff); 
-        leftH = makeH(0x00ffff);   rightH = makeH(0x0056b3);  
-        frontH = makeH(0xffff00);  backH = makeH(0xffa500);   
+        topH = makeH(0x007bff);      bottomH = makeH(0x00d4ff); 
+        leftH = makeH(0x00ffff);     rightH = makeH(0x0056b3);  
+        frontH = makeH(0xffff00);    backH = makeH(0xffa500);   
         rotX_H = createRing('x', 0xff0000); 
         rotY_H = createRing('y', 0x00ff00); 
         rotZ_H = createRing('z', 0x0000ff);
@@ -154,7 +155,7 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        const allHandles = [moveV, moveH_axis, topH, bottomH, leftH, rightH, frontH, backH, rotX_H, rotY_H, rotZ_H];
+        const allHandles = [moveV, moveX, moveZ, topH, bottomH, leftH, rightH, frontH, backH, rotX_H, rotY_H, rotZ_H];
         const hits = raycaster.intersectObjects([egg, ...allHandles].filter(o => o && (o.visible || o === egg)));
         
         if (hits.length > 0) {
@@ -167,9 +168,9 @@
                 controls.enabled = false;
                 startRotation.copy(egg.quaternion);
                 
-                // 이동/스케일에 따른 적절한 평면 설정
                 let normal = new THREE.Vector3(0, 0, 1);
-                if (dragTarget === moveH_axis || dragTarget === rightH || dragTarget === leftH) normal.set(0, 1, 0);
+                if (dragTarget === moveX || dragTarget === rightH || dragTarget === leftH) normal.set(0, 1, 0);
+                if (dragTarget === moveZ || dragTarget === frontH || dragTarget === backH) normal.set(0, 1, 0);
                 
                 plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
                 raycaster.ray.intersectPlane(plane, planeIntersect);
@@ -195,11 +196,12 @@
             const pos = planeIntersect.sub(dragStartOffset);
             
             if (dragTarget === moveV) {
-                // 수직 이동: 오직 Y축만 변경
                 egg.position.y = pos.y - ((BASE_H * egg.scale.y)/2 + 5);
-            } else if (dragTarget === moveH_axis) {
-                // 수평 이동: 오직 X축만 변경
+            } else if (dragTarget === moveX) {
                 egg.position.x = pos.x - ((BASE_R * 2 * egg.scale.x)/2 + 5);
+            } else if (dragTarget === moveZ) {
+                // 💡 앞/뒤 이동: Z축만 변경
+                egg.position.z = pos.z - ((BASE_R * 2 * egg.scale.z)/2 + 5);
             } else if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
                 const currentAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
                 const deltaAngle = -(currentAngle - startMouseAngle); 
@@ -210,7 +212,6 @@
                 const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAngle);
                 egg.quaternion.multiplyQuaternions(q, startRotation);
             } else {
-                // 앵커 스케일 로직
                 const curH = BASE_H * egg.scale.y, curW = BASE_R * 2 * egg.scale.x, curD = BASE_R * 2 * egg.scale.z;
                 if (dragTarget === topH) {
                     const bottomY = egg.position.y - curH/2;
@@ -249,10 +250,9 @@
             const curHY = (BASE_H * egg.scale.y)/2, curWX = (BASE_R * 2 * egg.scale.x)/2, curDZ = (BASE_R * 2 * egg.scale.z)/2;
             const center = egg.position;
             
-            // 수직 이동 핸들 (초록색)
-            moveV.position.set(center.x, center.y + curHY + 5, center.z);
-            // 수평 이동 핸들 (빨간색 - 우측 스케일 점 옆)
-            moveH_axis.position.set(center.x + curWX + 5, center.y, center.z);
+            moveV.position.set(center.x, center.y + curHY + 5, center.z); // Green
+            moveX.position.set(center.x + curWX + 5, center.y, center.z); // Red
+            moveZ.position.set(center.x, center.y, center.z + curDZ + 5); // Blue
 
             topH.position.set(center.x, center.y + curHY, center.z);
             bottomH.position.set(center.x, center.y - curHY, center.z);
