@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.4</title>
+    <title>Build-A-Crochet v5.6.5</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; box-shadow: 0 0 10px rgba(255,105,180,0.5); }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
         #status-display { position: absolute; top: 10px; left: 10px; z-index: 200; pointer-events: none; }
-        #v-tag { position: absolute; bottom: 10px; right: 10px; color: #555; font-size: 12px; }
+        #v-tag { position: absolute; bottom: 10px; right: 15px; color: #777; font-size: 12px; font-weight: bold; z-index: 200; }
     </style>
 </head>
 <body>
@@ -21,7 +21,7 @@
 
 <div id="canvas-container">
     <div id="status-display">System Ready. Click Pink Button.</div>
-    <div id="v-tag">v5.6.4 (One-side Horizontal Scale)</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.6.5</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -38,9 +38,8 @@
         try {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111111);
-            
             camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 30, 70); // Front view
+            camera.position.set(0, 30, 70);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth - 80, window.innerHeight);
@@ -51,7 +50,6 @@
             
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
-            controls.rotateSpeed = 0.5;
 
             window.addEventListener('pointerdown', onDown);
             window.addEventListener('pointermove', onMove);
@@ -71,15 +69,19 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
+        
+        // 💡 핵심 수정: 에그의 왼쪽 끝을 Pivot(0)에 맞추기 위해 전체를 오른쪽으로 이동
+        geo.translate(BASE_R, 0, 0); 
+        
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
         scene.add(egg);
 
         const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
-        topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); // Dark Blue
-        bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); // Light Blue
-        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); // Green
-        rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); // Deep Blue
+        topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); 
+        bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); 
+        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); 
+        rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); 
 
         [topH, bottomH, moveH, rightH].forEach(h => { h.visible = false; scene.add(h); });
         status.innerText = "Egg Active. Click Egg to Edit.";
@@ -108,20 +110,16 @@
         prevX = e.clientX; prevY = e.clientY;
 
         if (dragTarget === moveH) egg.position.y += dy * 0.1;
-        else if (dragTarget === topH) egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
+        else if (dragTarget === topH) {
+            egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
+        }
         else if (dragTarget === bottomH) {
             const oldS = egg.scale.y;
             egg.scale.y = Math.max(0.1, oldS - dy * 0.01);
             egg.position.y -= (egg.scale.y - oldS) * BASE_H;
         } else if (dragTarget === rightH) {
-            const oldS = egg.scale.x;
-            const newS = Math.max(0.1, oldS + dx * 0.02);
-            const scaleDiff = newS - oldS;
-
-            // 스케일을 적용
-            egg.scale.x = newS;
-            // 💡 핵심 보정식: 오른쪽으로 늘어나는 만큼 위치(X)를 절반만큼 오른쪽으로 이동시켜 왼쪽 좌표를 고정함
-            egg.position.x += scaleDiff * (BASE_R / 2);
+            // 이제 Pivot이 왼쪽 끝에 있으므로 단순 스케일만으로 오른쪽으로 늘어납니다!
+            egg.scale.x = Math.max(0.1, egg.scale.x + dx * 0.02);
         }
     }
 
@@ -132,11 +130,13 @@
         if (egg && topH) {
             const curH = BASE_H * egg.scale.y, curR = BASE_R * egg.scale.x;
             const bY = egg.position.y, tY = bY + curH, cX = egg.position.x;
-            topH.position.set(cX, tY, egg.position.z);
-            moveH.position.set(cX, tY + 4, egg.position.z);
-            bottomH.position.set(cX, bY, egg.position.z);
-            // 오른쪽 핸들을 X축 끝점에 동기화
-            rightH.position.set(cX + curR, bY + (curH / 2), egg.position.z);
+            
+            // Pivot이 왼쪽 끝(cX)이므로, 중앙 좌표는 cX + curR입니다.
+            topH.position.set(cX + curR, tY, egg.position.z);
+            moveH.position.set(cX + curR, tY + 4, egg.position.z);
+            bottomH.position.set(cX + curR, bY, egg.position.z);
+            // 오른쪽 핸들은 끝점(cX + 2*curR)에 위치
+            rightH.position.set(cX + (curR * 2), bY + (curH / 2), egg.position.z);
         }
         renderer.render(scene, camera);
         controls.update();
