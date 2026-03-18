@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.14.0</title>
+    <title>Build-A-Crochet v5.15.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.14.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.15.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -74,7 +74,7 @@
 
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
-        window.addEventListener('pointerup', () => { dragTarget = null; controls.enabled = true; });
+        window.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', (e) => {
             if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) undo();
             if ((e.key === 'Delete' || e.key === 'Backspace') && currentEgg) { saveState(); scene.remove(currentEgg); deselectAll(); }
@@ -103,24 +103,25 @@
         ghostEgg = createEggMesh(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg);
     }
 
-    // 💡 핵심: 상태 저장 로직 (현재 씬의 스냅샷 생성)
     function saveState() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
         const state = eggs.map(egg => ({
             pos: egg.position.clone(), rot: egg.quaternion.clone(), scale: egg.scale.clone(), color: egg.material.color.getHex()
         }));
-        history.push(JSON.stringify(state));
+        const json = JSON.stringify(state);
+        // 중복 저장 방지 (가장 최근 상태와 같으면 저장 안함)
+        if (history.length > 0 && history[history.length - 1] === json) return;
+        history.push(json);
         if (history.length > 50) history.shift();
     }
 
     window.undo = function() {
         if (history.length === 0) return;
+        
+        // 💡 현재 상태를 날리고 히스토리의 마지막을 적용
         const lastState = JSON.parse(history.pop());
         
-        // 1. 모든 기존 에그 제거
         scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
-        
-        // 2. 히스토리에서 가져온 에그들 복원
         lastState.forEach(d => {
             const egg = createEggMesh(new THREE.Color(d.color));
             egg.position.copy(d.pos); egg.quaternion.copy(d.rot); egg.scale.copy(d.scale);
@@ -182,16 +183,15 @@
         }
 
         const interactables = [moveV, moveX, moveZ, rotX_H, rotY_H, rotZ_H, topH, bottomH, leftH, rightH, frontH, backH];
-        const hits = raycaster.intersectObjects(scene.children.filter(o => o.visible && (o.userData.isEgg || interactables.includes(o))));
+        const eggs = scene.children.filter(o => o.userData.isEgg);
+        const hits = raycaster.intersectObjects([...interactables, ...eggs]);
         
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (interactables.includes(obj)) {
-                saveState(); // 💡 조작 시작 시점에 즉시 저장 (Undo를 위해 필수)
+                saveState(); // 조작 시작 시 저장
                 dragTarget = obj; controls.enabled = false;
-                startRotation.copy(currentEgg.quaternion);
-                startScale.copy(currentEgg.scale);
-                startPos.copy(currentEgg.position);
+                startRotation.copy(currentEgg.quaternion); startScale.copy(currentEgg.scale); startPos.copy(currentEgg.position);
                 const screenPos = dragTarget.position.clone().project(camera);
                 startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
             } else { selectEgg(obj); }
@@ -205,7 +205,10 @@
 
         if (isPlacementMode) {
             let intersect = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; }
+            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { 
+                ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; 
+                ghostEgg.visible = true; // 강제 표시
+            }
             return;
         }
 
@@ -243,6 +246,8 @@
             }
         }
     }
+
+    function onUp() { dragTarget = null; controls.enabled = true; }
 
     function animate() {
         requestAnimationFrame(animate);
