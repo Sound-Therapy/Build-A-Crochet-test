@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.7</title>
+    <title>Build-A-Crochet v5.6.8</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -21,14 +21,15 @@
 
 <div id="canvas-container">
     <div id="status-display">System Ready. Click Pink Button.</div>
-    <div id="v-tag">Build-A-Crochet Engine v5.6.7</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.6.8</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, egg, topH, bottomH, moveH, rightH, leftH;
+    let scene, camera, renderer, controls, egg;
+    let topH, bottomH, moveH, rightH, leftH, frontH, backH;
     let dragTarget = null;
     let prevX = 0, prevY = 0;
     const BASE_H = 20, BASE_R = 7;
@@ -39,14 +40,17 @@
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111111);
             camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 30, 70);
+            camera.position.set(40, 40, 80); // 전후 조작을 위해 약간 측면 뷰로 변경
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth - 80, window.innerHeight);
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
             scene.add(new THREE.GridHelper(100, 20, 0x444444, 0x222222));
-            scene.add(new THREE.AmbientLight(0xffffff, 1));
+            scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            let sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(20, 40, 30);
+            scene.add(sun);
             
             controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
@@ -69,22 +73,26 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        geo.translate(BASE_R, 0, 0); // Pivot: Left Edge
+        geo.translate(BASE_R, 0, 0); // X-Pivot: Left
         
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
-        egg.position.x = -BASE_R; // Start Centered
+        egg.position.set(-BASE_R, 0, 0); // Center in grid
         scene.add(egg);
 
         const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
-        topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); 
-        bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); 
-        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); 
-        rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); 
-        leftH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00ffff })); // Cyan (Left Scale)
+        const makeH = (col) => new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: col }));
 
-        [topH, bottomH, moveH, rightH, leftH].forEach(h => { h.visible = false; scene.add(h); });
-        status.innerText = "Egg Ready. 5 Handles Active.";
+        topH = makeH(0x007bff);    // Blue
+        bottomH = makeH(0x00d4ff); // Light Blue
+        moveH = makeH(0x28a745);   // Green
+        rightH = makeH(0x0056b3);  // Deep Blue
+        leftH = makeH(0x00ffff);   // Cyan
+        frontH = makeH(0xffff00);  // Yellow (Front)
+        backH = makeH(0xffa500);   // Orange (Back)
+
+        [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => { h.visible = false; scene.add(h); });
+        status.innerText = "3D Engine Active. 7 Handles Ready.";
     };
 
     function onDown(e) {
@@ -94,12 +102,13 @@
         raycaster.setFromCamera(mouse, camera);
 
         if (egg) {
-            const hits = raycaster.intersectObjects([topH, bottomH, moveH, rightH, leftH, egg].filter(o => o && (o.visible || o === egg)));
+            const targets = [topH, bottomH, moveH, rightH, leftH, frontH, backH, egg];
+            const hits = raycaster.intersectObjects(targets.filter(o => o && (o.visible || o === egg)));
             if (hits.length > 0) {
                 const obj = hits[0].object;
-                if (obj === egg) { [topH, bottomH, moveH, rightH, leftH].forEach(h => h.visible = true); }
+                if (obj === egg) { [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = true); }
                 else { dragTarget = obj; controls.enabled = false; prevX = e.clientX; prevY = e.clientY; }
-            } else { [topH, bottomH, moveH, rightH, leftH].forEach(h => h.visible = false); }
+            } else { [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = false); }
         }
     }
 
@@ -116,16 +125,20 @@
             egg.scale.y = Math.max(0.1, oldS - dy * 0.01);
             egg.position.y -= (egg.scale.y - oldS) * BASE_H;
         } else if (dragTarget === rightH) {
-            // 오른쪽으로만 늘리기 (왼쪽 고정)
             egg.scale.x = Math.max(0.1, egg.scale.x + dx * 0.02);
         } else if (dragTarget === leftH) {
-            // 왼쪽으로만 늘리기 (오른쪽 고정)
             const oldS = egg.scale.x;
-            const newS = Math.max(0.1, oldS - dx * 0.02);
-            const diff = newS - oldS;
-            egg.scale.x = newS;
-            // 스케일이 변하는 만큼 전체 위치를 반대로 밀어줌
-            egg.position.x -= diff * (BASE_R * 2);
+            egg.scale.x = Math.max(0.1, oldS - dx * 0.02);
+            egg.position.x -= (egg.scale.x - oldS) * (BASE_R * 2);
+        } else if (dragTarget === frontH) {
+            // 앞쪽으로 늘리기 (뒤쪽 고정)
+            const oldS = egg.scale.z;
+            egg.scale.z = Math.max(0.1, oldS + dy * 0.02); // 카메라 각도상 dy가 전후 느낌
+        } else if (dragTarget === backH) {
+            // 뒤쪽으로 늘리기 (앞쪽 고정)
+            const oldS = egg.scale.z;
+            egg.scale.z = Math.max(0.1, oldS - dy * 0.02);
+            egg.position.z += (egg.scale.z - oldS) * 0.1; // Z축 보정은 중심점에 따라 조정 필요
         }
     }
 
@@ -134,14 +147,18 @@
     function animate() {
         requestAnimationFrame(animate);
         if (egg && topH) {
-            const curH = BASE_H * egg.scale.y, curR = BASE_R * egg.scale.x;
-            const bY = egg.position.y, tY = bY + curH, cX = egg.position.x;
-            
-            topH.position.set(cX + curR, tY, egg.position.z);
-            moveH.position.set(cX + curR, tY + 4, egg.position.z);
-            bottomH.position.set(cX + curR, bY, egg.position.z);
-            rightH.position.set(cX + (curR * 2), bY + (curH / 2), egg.position.z);
-            leftH.position.set(cX, bY + (curH / 2), egg.position.z);
+            const curH = BASE_H * egg.scale.y, curR = BASE_R * egg.scale.x, curZ = egg.scale.z;
+            const bY = egg.position.y, tY = bY + curH, cX = egg.position.x, cZ = egg.position.z;
+            const centerX = cX + curR;
+
+            topH.position.set(centerX, tY, cZ);
+            moveH.position.set(centerX, tY + 4, cZ);
+            bottomH.position.set(centerX, bY, cZ);
+            rightH.position.set(cX + (curR * 2), bY + (curH / 2), cZ);
+            leftH.position.set(cX, bY + (curH / 2), cZ);
+            // 앞/뒤 핸들 위치 (Z축 방향)
+            frontH.position.set(centerX, bY + (curH / 2), cZ + (BASE_R * curZ));
+            backH.position.set(centerX, bY + (curH / 2), cZ - (BASE_R * curZ));
         }
         renderer.render(scene, camera);
         controls.update();
