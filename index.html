@@ -2,31 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.8.6</title>
+    <title>Build-A-Crochet v5.8.7</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
-        
-        .egg-btn { 
-            width: 40px; height: 50px; background: #ff69b4; 
-            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; 
-            cursor: pointer; position: relative; border: 2px solid #fff;
-            transition: transform 0.2s;
-        }
+        .egg-btn { width: 40px; height: 50px; background: #ff69b4; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; cursor: pointer; position: relative; border: 2px solid #fff; transition: transform 0.2s; }
         .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.6); transform: scale(1.1); }
         .egg-btn.active::after { content: 'ON'; position: absolute; top: 10px; left: 10px; color: #fff; font-weight: bold; font-size: 10px; }
-
         #canvas-container { flex-grow: 1; position: relative; background: #fff; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; z-index: 200; }
         #instruction { position: absolute; top: 20px; left: 100px; background: rgba(40,167,69,0.9); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: none; pointer-events: none; }
-
-        #palette { 
-            position: absolute; top: 20px; right: 20px; 
-            background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; 
-            display: none; grid-template-columns: repeat(6, 1fr); gap: 10px;
-            border: 1px solid #ccc; z-index: 300;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-        }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(6, 1fr); gap: 10px; border: 1px solid #ccc; z-index: 300; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
     </style>
 </head>
@@ -38,7 +24,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.8.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.8.7</div>
     <div id="instruction">Select location to spawn egg...</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
@@ -152,8 +138,6 @@
         newEgg.add(outline);
 
         selectEgg(newEgg);
-
-        // 💡 핵심 수정: 생성 후 배치 모드 자동 종료
         togglePlacementMode(); 
     }
 
@@ -214,11 +198,20 @@
                 dragTarget = obj;
                 controls.enabled = false;
                 startRotation.copy(currentEgg.quaternion);
-                let normal = (dragTarget === moveV || dragTarget === topH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+                
+                // 💡 회전 계산을 위한 기준 평면 설정 개선
+                let normal = new THREE.Vector3();
+                camera.getWorldDirection(normal);
                 plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
+                
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
-                startMouseAngle = Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2));
+                
+                // 화면 중심이 아닌 클릭 지점을 기준으로 각도 계산 시작
+                const screenPos = dragTarget.position.clone().project(camera);
+                const centerX = (screenPos.x + 1) * rect.width / 2;
+                const centerY = (-screenPos.y + 1) * rect.height / 2;
+                startMouseAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
             } else {
                 selectEgg(obj);
             }
@@ -229,29 +222,43 @@
 
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-        const raycaster = new THREE.Raycaster();
-        raycaster.setFromCamera(mouse, camera);
-
         if (isPlacementMode) {
+            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
             if (raycaster.ray.intersectPlane(groundPlane, planeIntersect)) {
-                ghostEgg.position.copy(planeIntersect);
-                ghostEgg.position.y += 10;
+                ghostEgg.position.copy(planeIntersect); ghostEgg.position.y += 10;
             }
             return;
         }
 
         if (!dragTarget || !currentEgg) return;
+        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+
         if (raycaster.ray.intersectPlane(plane, planeIntersect)) {
             const pos = planeIntersect.sub(dragStartOffset);
             if (dragTarget === moveV) currentEgg.position.y = pos.y - ((BASE_H * currentEgg.scale.y)/2 + 5);
             else if (dragTarget === moveX) currentEgg.position.x = pos.x - ((BASE_R * 2 * currentEgg.scale.x)/2 + 5);
             else if (dragTarget === moveZ) currentEgg.position.z = pos.z - ((BASE_R * 2 * currentEgg.scale.z)/2 + 5);
             else if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
-                const deltaAngle = -(Math.atan2(e.clientY - (rect.top + rect.height/2), e.clientX - (rect.left + rect.width/2)) - startMouseAngle);
-                const axis = dragTarget === rotX_H ? [1,0,0] : (dragTarget === rotY_H ? [0,1,0] : [0,0,1]);
-                currentEgg.quaternion.multiplyQuaternions(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(...axis), deltaAngle), startRotation);
+                const screenPos = dragTarget.position.clone().project(camera);
+                const centerX = (screenPos.x + 1) * rect.width / 2;
+                const centerY = (-screenPos.y + 1) * rect.height / 2;
+                const currentAngle = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+                const deltaAngle = -(currentAngle - startMouseAngle);
+
+                // 💡 로컬 축 기준 회전 적용
+                const axis = new THREE.Vector3();
+                if (dragTarget === rotX_H) axis.set(1, 0, 0);
+                else if (dragTarget === rotY_H) axis.set(0, 1, 0);
+                else if (dragTarget === rotZ_H) axis.set(0, 0, 1);
+                
+                // 에그의 현재 방향(quaternion)을 고려한 로컬 축 계산
+                const localAxis = axis.applyQuaternion(currentEgg.quaternion);
+                const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAngle);
+                currentEgg.quaternion.multiplyQuaternions(q, startRotation);
             } else {
+                // Scale handles (omitted for brevity, same as before)
                 const s = currentEgg.scale, p = currentEgg.position;
                 if (dragTarget === topH) { let b = p.y - (BASE_H*s.y)/2; s.y = Math.max(0.1, (pos.y-b)/BASE_H); p.y = b + (BASE_H*s.y)/2; }
                 else if (dragTarget === bottomH) { let t = p.y + (BASE_H*s.y)/2; s.y = Math.max(0.1, (t-pos.y)/BASE_H); p.y = t - (BASE_H*s.y)/2; }
@@ -276,7 +283,13 @@
             topH.position.set(p.x, p.y + hY, p.z); bottomH.position.set(p.x, p.y - hY, p.z);
             rightH.position.set(p.x + hX, p.y, p.z); leftH.position.set(p.x - hX, p.y, p.z);
             frontH.position.set(p.x, p.y, p.z + hZ); backH.position.set(p.x, p.y, p.z - hZ);
-            [rotX_H, rotY_H, rotZ_H].forEach(r => r.position.copy(p));
+            [rotX_H, rotY_H, rotZ_H].forEach(r => {
+                r.position.copy(p);
+                // 💡 핸들 링도 에그의 회전에 따라 같이 돌아가도록 설정
+                r.quaternion.copy(currentEgg.quaternion);
+                if (r === rotX_H) r.rotateY(Math.PI / 2);
+                if (r === rotY_H) r.rotateX(Math.PI / 2);
+            });
         }
         renderer.render(scene, camera);
         controls.update();
