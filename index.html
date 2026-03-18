@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.16.0</title>
+    <title>Build-A-Crochet v5.17.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; cursor: pointer; border: 2px solid #fff; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 8px; background: #eee; user-select: none; }
         .egg-btn { background: #ff69b4; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
-        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.6); }
-        .undo-btn { background: #555; color: white; }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 20px rgba(40,167,69,0.8); }
+        .undo-btn { background: #333; color: white; }
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(7, 1fr); gap: 10px; border: 1px solid #ccc; z-index: 300; }
@@ -19,27 +19,18 @@
 <body>
 
 <div id="panel">
-    <div id="undo-btn" class="btn undo-btn" onclick="undo()">UNDO</div>
+    <div class="btn undo-btn" onclick="safeUndo()">UNDO</div>
     <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
     <div style="font-size: 9px; color: #333; text-align: center;">ADD EGG</div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.16.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.17.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
-        <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
-        <div class="color-dot" style="background: #9c27b0;" onclick="changeColor('#9c27b0')"></div>
-        <div class="color-dot" style="background: #673ab7;" onclick="changeColor('#673ab7')"></div>
-        <div class="color-dot" style="background: #3f51b5;" onclick="changeColor('#3f51b5')"></div>
         <div class="color-dot" style="background: #2196f3;" onclick="changeColor('#2196f3')"></div>
-        <div class="color-dot" style="background: #00bcd4;" onclick="changeColor('#00bcd4')"></div>
         <div class="color-dot" style="background: #4caf50;" onclick="changeColor('#4caf50')"></div>
         <div class="color-dot" style="background: #ffeb3b;" onclick="changeColor('#ffeb3b')"></div>
-        <div class="color-dot" style="background: #ff9800;" onclick="changeColor('#ff9800')"></div>
-        <div class="color-dot" style="background: #ff5722;" onclick="changeColor('#ff5722')"></div>
-        <div class="color-dot" style="background: #795548;" onclick="changeColor('#795548')"></div>
-        <div class="color-dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="changeColor('#ffffff')"></div>
         <div class="color-dot" style="background: #000000;" onclick="changeColor('#000000')"></div>
     </div>
 </div>
@@ -75,14 +66,6 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        window.addEventListener('keydown', (e) => {
-            if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) undo();
-            if ((e.key === 'Delete' || e.key === 'Backspace') && currentEgg) { 
-                scene.remove(currentEgg); 
-                saveState(); 
-                deselectAll(); 
-            }
-        });
         animate();
     }
 
@@ -93,7 +76,7 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
-        const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.7 });
+        const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: isGhost ? 0.4 : 0.8 });
         const egg = new THREE.Mesh(geo, mat);
         if (!isGhost) {
             egg.userData.isEgg = true;
@@ -104,49 +87,41 @@
     }
 
     function createGhost() {
-        ghostEgg = createEggMesh(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg);
+        ghostEgg = createEggMesh(0x28a745, true); 
+        ghostEgg.visible = false; 
+        scene.add(ghostEgg);
     }
 
-    // 💡 개량된 상태 저장: 현재 '완성된' 씬의 상태를 기록
-    function saveState() {
+    // 💡 불변의 상태 저장 함수
+    function pushHistory() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
-        const state = eggs.map(egg => ({
+        const snapshot = eggs.map(egg => ({
             pos: egg.position.clone(), rot: egg.quaternion.clone(), scale: egg.scale.clone(), color: egg.material.color.getHex()
         }));
-        const json = JSON.stringify(state);
-        
-        // 중복 방지 및 기록
-        if (history.length > 0 && history[history.length - 1] === json) return;
-        history.push(json);
-        if (history.length > 50) history.shift();
-        console.log("State Saved. History Count:", history.length);
+        history.push(JSON.stringify(snapshot));
+        if (history.length > 30) history.shift();
     }
 
-    window.undo = function() {
+    window.safeUndo = function() {
         if (history.length <= 1) {
-            // 기록이 하나뿐이거나 없으면, 빈 화면으로 가는 대신 그냥 무시하거나 초기 상태 유지
-            if (history.length === 1) {
-                // 첫 에그 생성 전 상태(비어있음)가 저장된 경우일 수 있으므로 처리
-                const last = JSON.parse(history[0]);
-                if (last.length === 0) return; 
-            } else return;
+            // 기록이 하나뿐이면 그 기록(첫 에그)을 유지하고 초기화 방지
+            if (history.length === 1) renderFromState(JSON.parse(history[0]));
+            return;
         }
-        
-        // 1. 현재 막 작업한 상태(최상단)를 제거
-        history.pop();
-        
-        // 2. 바로 그 이전 상태를 적용
-        const prevStateJson = history[history.length - 1];
-        const prevState = JSON.parse(prevStateJson);
-        
+        history.pop(); // 현재 상태 제거
+        const prevState = JSON.parse(history[history.length - 1]);
+        renderFromState(prevState);
+    };
+
+    function renderFromState(stateData) {
         scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
-        prevState.forEach(d => {
+        stateData.forEach(d => {
             const egg = createEggMesh(new THREE.Color(d.color));
             egg.position.copy(d.pos); egg.quaternion.copy(d.rot); egg.scale.copy(d.scale);
             scene.add(egg);
         });
         deselectAll();
-    };
+    }
 
     window.togglePlacementMode = function() {
         isPlacementMode = !isPlacementMode;
@@ -159,20 +134,20 @@
         const egg = createEggMesh(0xff69b4);
         egg.position.copy(pos); egg.position.y += 10;
         scene.add(egg);
-        saveState(); // 생성 완료 후 저장
+        pushHistory(); // 생성 직후 저장
         selectEgg(egg); togglePlacementMode();
     }
 
     function createHandles() {
         const makeH = (col) => { 
-            const m = new THREE.Mesh(new THREE.SphereGeometry(1.3, 16, 16), new THREE.MeshBasicMaterial({ color: col })); 
-            m.visible = false; scene.add(m); return m; 
+            const m = new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), new THREE.MeshBasicMaterial({ color: col, depthTest: false })); 
+            m.renderOrder = 999; m.visible = false; scene.add(m); return m; 
         };
         moveV = makeH(0x28a745); moveX = makeH(0xff0000); moveZ = makeH(0x0000ff);
         topH = makeH(0x007bff); bottomH = makeH(0x00d4ff); leftH = makeH(0xffff00); rightH = makeH(0xffa500); frontH = makeH(0xff00ff); backH = makeH(0x00ffff);
         const createRing = (color) => {
-            const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.2, 16, 64), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4 }));
-            r.visible = false; scene.add(r); return r;
+            const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.4, 16, 64), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, depthTest: false }));
+            r.renderOrder = 998; r.visible = false; scene.add(r); return r;
         };
         rotX_H = createRing(0xff0000); rotY_H = createRing(0x00ff00); rotZ_H = createRing(0x0000ff);
     }
@@ -189,7 +164,7 @@
         document.getElementById('palette').style.display = 'none'; 
     }
 
-    window.changeColor = function(c) { if(currentEgg) { currentEgg.material.color.set(c); saveState(); } }
+    window.changeColor = function(c) { if(currentEgg) { currentEgg.material.color.set(c); pushHistory(); } }
 
     function onDown(e) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -224,10 +199,9 @@
         if (isPlacementMode) {
             let intersect = new THREE.Vector3();
             if (raycaster.ray.intersectPlane(groundPlane, intersect)) { 
-                ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; 
+                ghostEgg.position.copy(intersect); ghostEgg.position.y += 10;
                 ghostEgg.visible = true;
             }
-            return;
         }
 
         if (!dragTarget || !currentEgg) return;
@@ -266,10 +240,7 @@
     }
 
     function onUp() { 
-        if (isDragging) {
-            saveState(); // 드래그가 끝난 '최종 결과'를 히스토리에 저장
-            isDragging = false;
-        }
+        if (isDragging) { pushHistory(); isDragging = false; }
         dragTarget = null; controls.enabled = true; 
     }
 
