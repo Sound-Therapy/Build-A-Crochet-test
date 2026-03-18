@@ -2,12 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.8.5</title>
+    <title>Build-A-Crochet v5.8.6</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         
-        /* 핑크 에그 형태의 버튼 */
         .egg-btn { 
             width: 40px; height: 50px; background: #ff69b4; 
             border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; 
@@ -19,7 +18,7 @@
 
         #canvas-container { flex-grow: 1; position: relative; background: #fff; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; z-index: 200; }
-        #instruction { position: absolute; top: 20px; left: 100px; background: rgba(0,0,0,0.7); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: none; pointer-events: none; }
+        #instruction { position: absolute; top: 20px; left: 100px; background: rgba(40,167,69,0.9); color: white; padding: 8px 15px; border-radius: 20px; font-size: 12px; display: none; pointer-events: none; }
 
         #palette { 
             position: absolute; top: 20px; right: 20px; 
@@ -39,8 +38,8 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.8.5</div>
-    <div id="instruction">Click on grid to place. Right-click or button to exit.</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.8.6</div>
+    <div id="instruction">Select location to spawn egg...</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -55,7 +54,8 @@
         <div class="color-dot" style="background: #ff5722;" onclick="changeColor('#ff5722')"></div>
         <div class="color-dot" style="background: #795548;" onclick="changeColor('#795548')"></div>
         <div class="color-dot" style="background: #ffffff; border: 1px solid #ccc;" onclick="changeColor('#ffffff')"></div>
-        <div class="color-dot" style="background: #000000;" onclick="changeColor('#000000')"></div> </div>
+        <div class="color-dot" style="background: #000000;" onclick="changeColor('#000000')"></div>
+    </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -91,13 +91,17 @@
         controls.enableDamping = true;
 
         createGhost();
-        createHandles(); // 핸들 미리 생성
+        createHandles();
 
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('contextmenu', (e) => { if(isPlacementMode) { e.preventDefault(); togglePlacementMode(); } });
+        window.addEventListener('keydown', (e) => {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && currentEgg) {
+                scene.remove(currentEgg);
+                deselectAll();
+            }
+        });
         animate();
     }
 
@@ -111,7 +115,7 @@
         }
         const geo = new THREE.LatheGeometry(points, 32);
         geo.translate(0, -10, 0);
-        const mat = new THREE.MeshBasicMaterial({ color: 0xff69b4, transparent: true, opacity: 0.3, wireframe: true });
+        const mat = new THREE.MeshBasicMaterial({ color: 0x28a745, transparent: true, opacity: 0.3, wireframe: true });
         ghostEgg = new THREE.Mesh(geo, mat);
         ghostEgg.visible = false;
         scene.add(ghostEgg);
@@ -148,6 +152,9 @@
         newEgg.add(outline);
 
         selectEgg(newEgg);
+
+        // 💡 핵심 수정: 생성 후 배치 모드 자동 종료
+        togglePlacementMode(); 
     }
 
     function createHandles() {
@@ -185,22 +192,13 @@
         document.getElementById('palette').style.display = 'none';
     }
 
-    function onKeyDown(e) {
-        if ((e.key === 'Delete' || e.key === 'Backspace') && currentEgg) {
-            scene.remove(currentEgg);
-            deselectAll();
-        }
-    }
-
-    window.changeColor = function(c) { if(currentEgg) currentEgg.material.color.set(c); }
-
     function onDown(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        if (isPlacementMode && e.button === 0) { // 왼클릭으로 생성
+        if (isPlacementMode && e.button === 0) {
             if (raycaster.ray.intersectPlane(groundPlane, planeIntersect)) {
                 spawnEgg(planeIntersect);
                 return;
@@ -256,8 +254,11 @@
             } else {
                 const s = currentEgg.scale, p = currentEgg.position;
                 if (dragTarget === topH) { let b = p.y - (BASE_H*s.y)/2; s.y = Math.max(0.1, (pos.y-b)/BASE_H); p.y = b + (BASE_H*s.y)/2; }
+                else if (dragTarget === bottomH) { let t = p.y + (BASE_H*s.y)/2; s.y = Math.max(0.1, (t-pos.y)/BASE_H); p.y = t - (BASE_H*s.y)/2; }
                 else if (dragTarget === rightH) { let l = p.x - (BASE_R*2*s.x)/2; s.x = Math.max(0.1, (pos.x-l)/(BASE_R*2)); p.x = l + (BASE_R*2*s.x)/2; }
+                else if (dragTarget === leftH) { let r = p.x + (BASE_R*2*s.x)/2; s.x = Math.max(0.1, (r-pos.x)/(BASE_R*2)); p.x = r - (BASE_R*2*s.x)/2; }
                 else if (dragTarget === frontH) { let bk = p.z - (BASE_R*2*s.z)/2; s.z = Math.max(0.1, (pos.z-bk)/(BASE_R*2)); p.z = bk + (BASE_R*2*s.z)/2; }
+                else if (dragTarget === backH) { let f = p.z + (BASE_R*2*s.z)/2; s.z = Math.max(0.1, (f-pos.z)/(BASE_R*2)); p.z = f - (BASE_R*2*s.z)/2; }
             }
         }
     }
