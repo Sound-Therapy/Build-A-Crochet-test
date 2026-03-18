@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.2</title>
+    <title>Build-A-Crochet v5.7.3</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
-        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #555; font-size: 12px; font-weight: bold; z-index: 200; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #666; font-size: 12px; font-weight: bold; z-index: 200; }
     </style>
 </head>
 <body>
@@ -19,15 +19,16 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.2</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.3</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, egg;
-    let moveH, rotX_H, rotY_H, rotZ_H;
+    let scene, camera, renderer, controls, egg, gizmoGroup;
+    let moveH, topH, bottomH, leftH, rightH, frontH, backH;
+    let rotX_H, rotY_H, rotZ_H;
     let dragTarget = null;
     let plane = new THREE.Plane();
     let planeIntersect = new THREE.Vector3();
@@ -60,8 +61,8 @@
     }
 
     function createRing(axis, color) {
-        const geometry = new THREE.TorusGeometry(15, 0.4, 16, 64, Math.PI);
-        const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide });
+        const geometry = new THREE.TorusGeometry(18, 0.3, 16, 64);
+        const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.6 });
         const ring = new THREE.Mesh(geometry, material);
         if (axis === 'x') ring.rotation.y = Math.PI / 2;
         if (axis === 'y') ring.rotation.x = Math.PI / 2;
@@ -80,18 +81,24 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.7 });
+        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.6 });
         egg = new THREE.Mesh(geo, mat);
         scene.add(egg);
 
-        const hGeo = new THREE.SphereGeometry(1.5, 16, 16);
-        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
-        moveH.visible = false;
-        scene.add(moveH);
+        const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        const makeH = (col) => {
+            const m = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: col }));
+            m.visible = false; scene.add(m); return m;
+        };
 
-        rotX_H = createRing('x', 0xff0000); // Red: X-axis
-        rotY_H = createRing('y', 0x00ff00); // Green: Y-axis
-        rotZ_H = createRing('z', 0x0000ff); // Blue: Z-axis
+        moveH = makeH(0x28a745); // 이동
+        topH = makeH(0x007bff);    bottomH = makeH(0x00d4ff); // 상하
+        leftH = makeH(0x00ffff);   rightH = makeH(0x0056b3);  // 좌우
+        frontH = makeH(0xffff00);  backH = makeH(0xffa500);   // 전후
+
+        rotX_H = createRing('x', 0xff0000); 
+        rotY_H = createRing('y', 0x00ff00); 
+        rotZ_H = createRing('z', 0x0000ff);
     };
 
     function onDown(e) {
@@ -100,12 +107,13 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        const hits = raycaster.intersectObjects([egg, moveH, rotX_H, rotY_H, rotZ_H].filter(o => o && (o.visible || o === egg)));
+        const allHandles = [moveH, topH, bottomH, leftH, rightH, frontH, backH, rotX_H, rotY_H, rotZ_H];
+        const hits = raycaster.intersectObjects([egg, ...allHandles].filter(o => o && (o.visible || o === egg)));
         
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (obj === egg) {
-                [moveH, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
+                allHandles.forEach(h => h.visible = true);
             } else {
                 dragTarget = obj;
                 controls.enabled = false;
@@ -117,12 +125,10 @@
                 
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
-                
-                // 회전 시작 각도 기록 (단순 스크린 좌표 기준)
                 startMouseAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
             }
         } else {
-            [moveH, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
+            allHandles.forEach(h => h.visible = false);
         }
     }
 
@@ -137,19 +143,21 @@
             const pos = planeIntersect.sub(dragStartOffset);
             
             if (dragTarget === moveH) {
-                egg.position.copy(pos.clone().sub(new THREE.Vector3(0, BASE_H/2 + 4, 0)));
-            } else {
-                // 회전 로직: 마우스의 회전량을 각도로 변환
+                egg.position.copy(pos.clone().sub(new THREE.Vector3(0, (BASE_H * egg.scale.y)/2 + 4, 0)));
+            } else if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
                 const currentAngle = Math.atan2(e.clientY - window.innerHeight/2, e.clientX - window.innerWidth/2);
                 const deltaAngle = currentAngle - startMouseAngle;
-                
                 const axis = new THREE.Vector3();
                 if (dragTarget === rotX_H) axis.set(1, 0, 0);
                 else if (dragTarget === rotY_H) axis.set(0, 1, 0);
                 else if (dragTarget === rotZ_H) axis.set(0, 0, 1);
-                
                 const q = new THREE.Quaternion().setFromAxisAngle(axis, deltaAngle);
                 egg.quaternion.multiplyQuaternions(q, startRotation);
+            } else {
+                // 스케일 로직 (로컬 좌표 변환 생략형 간이 구현)
+                if (dragTarget === topH) egg.scale.y = Math.max(0.1, (pos.y - egg.position.y) / (BASE_H/2));
+                else if (dragTarget === rightH) egg.scale.x = Math.max(0.1, (pos.x - egg.position.x) / BASE_R);
+                else if (dragTarget === frontH) egg.scale.z = Math.max(0.1, (pos.z - egg.position.z) / BASE_R);
             }
         }
     }
@@ -159,8 +167,17 @@
     function animate() {
         requestAnimationFrame(animate);
         if (egg && moveH) {
-            const center = egg.position.clone();
-            moveH.position.copy(center).add(new THREE.Vector3(0, BASE_H/2 + 4, 0));
+            const curH = (BASE_H * egg.scale.y)/2, curW = BASE_R * egg.scale.x, curD = BASE_R * egg.scale.z;
+            const center = egg.position;
+            
+            // 모든 핸들을 에그의 위치와 회전에 맞춰 정렬
+            moveH.position.copy(center).add(new THREE.Vector3(0, curH + 4, 0));
+            topH.position.copy(center).add(new THREE.Vector3(0, curH, 0));
+            bottomH.position.copy(center).add(new THREE.Vector3(0, -curH, 0));
+            rightH.position.copy(center).add(new THREE.Vector3(curW, 0, 0));
+            leftH.position.copy(center).add(new THREE.Vector3(-curW, 0, 0));
+            frontH.position.copy(center).add(new THREE.Vector3(0, 0, curD));
+            backH.position.copy(center).add(new THREE.Vector3(0, 0, -curD));
             [rotX_H, rotY_H, rotZ_H].forEach(r => r.position.copy(center));
         }
         renderer.render(scene, camera);
