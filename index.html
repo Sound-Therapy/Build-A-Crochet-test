@@ -2,44 +2,60 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.7.6</title>
+    <title>Build-A-Crochet v5.7.7</title>
     <style>
-        body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
-        #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
+        body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
+        #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; }
-        #canvas-container { flex-grow: 1; position: relative; background: #000; }
-        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #777; font-size: 12px; font-weight: bold; z-index: 200; }
+        #canvas-container { flex-grow: 1; position: relative; background: #fff; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; z-index: 200; }
         
-        /* 팔레트 스타일 */
+        /* 확장된 팔레트 스타일 (3x6 그리드) */
         #palette { 
             position: absolute; top: 20px; right: 20px; 
-            background: rgba(0,0,0,0.7); padding: 10px; border-radius: 15px; 
-            display: none; grid-template-columns: repeat(3, 1fr); gap: 8px;
-            border: 1px solid #444; z-index: 300;
+            background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; 
+            display: none; grid-template-columns: repeat(6, 1fr); gap: 10px;
+            border: 1px solid #ccc; z-index: 300;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         .color-dot { 
-            width: 30px; height: 30px; border-radius: 50%; cursor: pointer; 
-            border: 2px solid transparent; transition: transform 0.2s;
+            width: 32px; height: 32px; border-radius: 50%; cursor: pointer; 
+            border: 1px solid rgba(0,0,0,0.1); transition: transform 0.2s, border-color 0.2s;
         }
-        .color-dot:hover { transform: scale(1.2); border-color: white; }
+        .color-dot:hover { transform: scale(1.2); border-color: #111; }
     </style>
 </head>
 <body>
 
 <div id="panel">
     <button class="btn" onclick="handleSpawn()"></button>
-    <div style="font-size: 10px; margin-top: 5px; color: #ccc;">ADD EGG</div>
+    <div style="font-size: 10px; margin-top: 5px; color: #333;">ADD EGG</div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.7.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.7</div>
+    
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
-        <div class="color-dot" style="background: #ff4500;" onclick="changeColor('#ff4500')"></div>
-        <div class="color-dot" style="background: #ffd700;" onclick="changeColor('#ffd700')"></div>
-        <div class="color-dot" style="background: #00ced1;" onclick="changeColor('#00ced1')"></div>
-        <div class="color-dot" style="background: #9370db;" onclick="changeColor('#9370db')"></div>
-        <div class="color-dot" style="background: #ffffff;" onclick="changeColor('#ffffff')"></div>
+        <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
+        <div class="color-dot" style="background: #9c27b0;" onclick="changeColor('#9c27b0')"></div>
+        <div class="color-dot" style="background: #673ab7;" onclick="changeColor('#673ab7')"></div>
+        <div class="color-dot" style="background: #3f51b5;" onclick="changeColor('#3f51b5')"></div>
+        <div class="color-dot" style="background: #2196f3;" onclick="changeColor('#2196f3')"></div>
+        
+        <div class="color-dot" style="background: #03a9f4;" onclick="changeColor('#03a9f4')"></div>
+        <div class="color-dot" style="background: #00bcd4;" onclick="changeColor('#00bcd4')"></div>
+        <div class="color-dot" style="background: #009688;" onclick="changeColor('#009688')"></div>
+        <div class="color-dot" style="background: #4caf50;" onclick="changeColor('#4caf50')"></div>
+        <div class="color-dot" style="background: #8bc34a;" onclick="changeColor('#8bc34a')"></div>
+        <div class="color-dot" style="background: #cddc39;" onclick="changeColor('#cddc39')"></div>
+
+        <div class="color-dot" style="background: #ffeb3b;" onclick="changeColor('#ffeb3b')"></div>
+        <div class="color-dot" style="background: #ffc107;" onclick="changeColor('#ffc107')"></div>
+        <div class="color-dot" style="background: #ff9800;" onclick="changeColor('#ff9800')"></div>
+        <div class="color-dot" style="background: #ff5722;" onclick="changeColor('#ff5722')"></div>
+        <div class="color-dot" style="background: #795548;" onclick="changeColor('#795548')"></div>
+        <div class="color-dot" style="background: #fdfdfd; border: 1px solid #ccc;" onclick="changeColor('#fdfdfd')"></div>
     </div>
 </div>
 
@@ -61,7 +77,7 @@
 
     function init() {
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x111111);
+        scene.background = new THREE.Color(0xffffff); // 흰색 배경
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
         camera.position.set(60, 50, 80);
 
@@ -69,8 +85,10 @@
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-        scene.add(new THREE.GridHelper(100, 20, 0x444444, 0x222222));
-        scene.add(new THREE.AmbientLight(0xffffff, 1));
+        // 그리드 라인 색상을 흰색 배경에 맞춰 더 짙게 조정
+        scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
+        
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2)); // 전체 조명 강화
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
@@ -83,7 +101,7 @@
 
     function createRing(axis, color) {
         const geometry = new THREE.TorusGeometry(22, 0.2, 16, 64);
-        const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4 });
+        const material = new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5 }); // 투명도 약간 강화
         const ring = new THREE.Mesh(geometry, material);
         if (axis === 'x') ring.rotation.y = Math.PI / 2;
         if (axis === 'y') ring.rotation.x = Math.PI / 2;
@@ -103,7 +121,7 @@
         }
         const geo = new THREE.LatheGeometry(points, 32);
         geo.translate(0, -10, 0); 
-        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.6 });
+        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.7 });
         egg = new THREE.Mesh(geo, mat);
         scene.add(egg);
 
