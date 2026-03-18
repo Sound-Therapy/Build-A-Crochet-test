@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.12.0</title>
+    <title>Build-A-Crochet v5.13.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.12.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.13.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -53,8 +53,7 @@
     let moveV, moveX, moveZ, rotX_H, rotY_H, rotZ_H;
     let topH, bottomH, leftH, rightH, frontH, backH;
     let history = [];
-    let startRotation = new THREE.Quaternion(), startMouseAngle = 0;
-    let startScale = new THREE.Vector3(), startPos = new THREE.Vector3();
+    let startRotation = new THREE.Quaternion(), startScale = new THREE.Vector3(), startPos = new THREE.Vector3();
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7;
 
@@ -68,7 +67,10 @@
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         scene.add(new THREE.AmbientLight(0xffffff, 1.2));
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        createGhost(); createHandles();
+        
+        createHandles();
+        createGhost(); // 💡 반드시 핸들 생성 후 고스트 생성
+
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', () => { dragTarget = null; controls.enabled = true; });
@@ -79,43 +81,52 @@
         animate();
     }
 
-    function saveState() {
-        const state = scene.children.filter(o => o.userData.isEgg).map(egg => ({
-            pos: egg.position.clone(), rot: egg.quaternion.clone(), scale: egg.scale.clone(), color: egg.material.color.getHex()
-        }));
-        history.push(JSON.stringify(state));
-        if (history.length > 30) history.shift();
-    }
-
-    window.undo = function() {
-        if (history.length === 0) return;
-        const last = JSON.parse(history.pop());
-        scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
-        last.forEach(d => {
-            const egg = createEggMesh(new THREE.Color(d.color));
-            egg.position.copy(d.pos); egg.quaternion.copy(d.rot); egg.scale.copy(d.scale);
-            scene.add(egg);
-        });
-        deselectAll();
-    };
-
-    function createEggMesh(color) {
+    function createEggMesh(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20; const y = t * BASE_H;
             const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
-        const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: 0.7 });
-        const egg = new THREE.Mesh(geo, mat); egg.userData.isEgg = true;
-        const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
-        outline.scale.set(1.02, 1.02, 1.02); egg.add(outline);
+        const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.7 });
+        const egg = new THREE.Mesh(geo, mat);
+        if (!isGhost) {
+            egg.userData.isEgg = true;
+            const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
+            outline.scale.set(1.02, 1.02, 1.02); egg.add(outline);
+        }
         return egg;
     }
 
     function createGhost() {
-        ghostEgg = createEggMesh(0x28a745); ghostEgg.material.opacity = 0.3; ghostEgg.visible = false; scene.add(ghostEgg);
+        ghostEgg = createEggMesh(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg);
     }
+
+    function saveState() {
+        const eggs = scene.children.filter(o => o.userData.isEgg);
+        const state = eggs.map(egg => ({
+            pos: egg.position.clone(), rot: egg.quaternion.clone(), scale: egg.scale.clone(), color: egg.material.color.getHex()
+        }));
+        history.push(JSON.stringify(state));
+        if (history.length > 50) history.shift();
+    }
+
+    window.undo = function() {
+        if (history.length === 0) return;
+        const lastJson = history.pop();
+        const lastState = JSON.parse(lastJson);
+        
+        // 기존 에그 모두 제거
+        scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
+        
+        // 상태 복구
+        lastState.forEach(d => {
+            const egg = createEggMesh(new THREE.Color(d.color));
+            egg.position.copy(d.pos); egg.quaternion.copy(d.rot); egg.scale.copy(d.scale);
+            scene.add(egg);
+        });
+        deselectAll();
+    };
 
     window.togglePlacementMode = function() {
         isPlacementMode = !isPlacementMode;
@@ -190,12 +201,18 @@
 
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        if (!dragTarget || !currentEgg) return;
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
+        if (isPlacementMode) {
+            let intersect = new THREE.Vector3();
+            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; }
+            return;
+        }
+
+        if (!dragTarget || !currentEgg) return;
+
         if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
-            // Rotation Logic (v5.8.9)
             const screenPos = dragTarget.position.clone().project(camera);
             const centerX = rect.left + (1 + screenPos.x) * rect.width / 2;
             const centerY = rect.top + (1 - screenPos.y) * rect.height / 2;
@@ -213,44 +230,16 @@
             const plane = new THREE.Plane(planeNormal, -dragTarget.position.dot(planeNormal));
             if (raycaster.ray.intersectPlane(plane, intersect)) {
                 const diff = intersect.clone().sub(dragTarget.position);
-                // 에그의 로컬 축으로 변환
                 const localDiff = diff.clone().applyQuaternion(currentEgg.quaternion.clone().invert());
-                
-                if (dragTarget === moveV || dragTarget === moveX || dragTarget === moveZ) {
-                    currentEgg.position.add(diff);
-                } else {
-                    // 💡 v5.12.0 핵심: 앵커 기반 독립 스케일링
-                    if (dragTarget === topH) {
-                        const deltaS = localDiff.y / BASE_H;
-                        currentEgg.scale.y = Math.max(0.1, startScale.y + deltaS);
-                        const moveLocal = new THREE.Vector3(0, (currentEgg.scale.y - startScale.y) * BASE_H / 2, 0);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    } else if (dragTarget === bottomH) {
-                        const deltaS = -localDiff.y / BASE_H;
-                        currentEgg.scale.y = Math.max(0.1, startScale.y + deltaS);
-                        const moveLocal = new THREE.Vector3(0, -(currentEgg.scale.y - startScale.y) * BASE_H / 2, 0);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    } else if (dragTarget === rightH) {
-                        const deltaS = localDiff.x / (BASE_R * 2);
-                        currentEgg.scale.x = Math.max(0.1, startScale.x + deltaS);
-                        const moveLocal = new THREE.Vector3((currentEgg.scale.x - startScale.x) * BASE_R, 0, 0);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    } else if (dragTarget === leftH) {
-                        const deltaS = -localDiff.x / (BASE_R * 2);
-                        currentEgg.scale.x = Math.max(0.1, startScale.x + deltaS);
-                        const moveLocal = new THREE.Vector3(-(currentEgg.scale.x - startScale.x) * BASE_R, 0, 0);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    } else if (dragTarget === frontH) {
-                        const deltaS = localDiff.z / (BASE_R * 2);
-                        currentEgg.scale.z = Math.max(0.1, startScale.z + deltaS);
-                        const moveLocal = new THREE.Vector3(0, 0, (currentEgg.scale.z - startScale.z) * BASE_R);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    } else if (dragTarget === backH) {
-                        const deltaS = -localDiff.z / (BASE_R * 2);
-                        currentEgg.scale.z = Math.max(0.1, startScale.z + deltaS);
-                        const moveLocal = new THREE.Vector3(0, 0, -(currentEgg.scale.z - startScale.z) * BASE_R);
-                        currentEgg.position.copy(startPos).add(moveLocal.applyQuaternion(currentEgg.quaternion));
-                    }
+                if ([moveV, moveX, moveZ].includes(dragTarget)) { currentEgg.position.add(diff); }
+                else {
+                    const s = currentEgg.scale;
+                    if (dragTarget === topH) { s.y = Math.max(0.1, startScale.y + localDiff.y/BASE_H); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (s.y-startScale.y)*BASE_H/2, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (dragTarget === bottomH) { s.y = Math.max(0.1, startScale.y - localDiff.y/BASE_H); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, -(s.y-startScale.y)*BASE_H/2, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (dragTarget === rightH) { s.x = Math.max(0.1, startScale.x + localDiff.x/(BASE_R*2)); currentEgg.position.copy(startPos).add(new THREE.Vector3((s.x-startScale.x)*BASE_R, 0, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (dragTarget === leftH) { s.x = Math.max(0.1, startScale.x - localDiff.x/(BASE_R*2)); currentEgg.position.copy(startPos).add(new THREE.Vector3(-(s.x-startScale.x)*BASE_R, 0, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (dragTarget === frontH) { s.z = Math.max(0.1, startScale.z + localDiff.z/(BASE_R*2)); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (s.z-startScale.z)*BASE_R).applyQuaternion(currentEgg.quaternion)); }
+                    else if (dragTarget === backH) { s.z = Math.max(0.1, startScale.z - localDiff.z/(BASE_R*2)); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, -(s.z-startScale.z)*BASE_R).applyQuaternion(currentEgg.quaternion)); }
                 }
             }
         }
@@ -259,23 +248,13 @@
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg && moveV) {
-            const p = currentEgg.position, s = currentEgg.scale;
-            const q = currentEgg.quaternion;
-            
-            const updateH = (h, ox, oy, oz) => {
-                const vec = new THREE.Vector3(ox, oy, oz).applyQuaternion(q);
-                h.position.copy(p).add(vec);
-            };
-
-            updateH(moveV, 0, 15 * s.y, 0); updateH(moveX, 15 * s.x, 0, 0); updateH(moveZ, 0, 0, 15 * s.z);
-            updateH(topH, 0, 10 * s.y, 0); updateH(bottomH, 0, -10 * s.y, 0);
-            updateH(rightH, 7 * s.x, 0, 0); updateH(leftH, -7 * s.x, 0, 0);
-            updateH(frontH, 0, 0, 7 * s.z); updateH(backH, 0, 0, -7 * s.z);
-
-            [rotX_H, rotY_H, rotZ_H].forEach(r => {
-                r.position.copy(p); r.quaternion.copy(q);
-                if (r === rotX_H) r.rotateY(Math.PI / 2); if (r === rotY_H) r.rotateX(Math.PI / 2);
-            });
+            const p = currentEgg.position, s = currentEgg.scale, q = currentEgg.quaternion;
+            const upH = (h, x, y, z) => h.position.copy(p).add(new THREE.Vector3(x, y, z).applyQuaternion(q));
+            upH(moveV, 0, 15*s.y, 0); upH(moveX, 15*s.x, 0, 0); upH(moveZ, 0, 0, 15*s.z);
+            upH(topH, 0, 10*s.y, 0); upH(bottomH, 0, -10*s.y, 0);
+            upH(rightH, 7*s.x, 0, 0); upH(leftH, -7*s.x, 0, 0);
+            upH(frontH, 0, 0, 7*s.z); upH(backH, 0, 0, -7*s.z);
+            [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if (r === rotX_H) r.rotateY(Math.PI/2); if (r === rotY_H) r.rotateX(Math.PI/2); });
         }
         renderer.render(scene, camera); controls.update();
     }
