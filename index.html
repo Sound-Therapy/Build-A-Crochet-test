@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.5.7</title>
+    <title>Build-A-Crochet v5.6.3</title>
     <style>
-        body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; }
+        body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
-        .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; }
+        .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; box-shadow: 0 0 10px rgba(255,105,180,0.5); }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
         #status-display { position: absolute; top: 10px; left: 10px; z-index: 200; pointer-events: none; }
         #v-tag { position: absolute; bottom: 10px; right: 10px; color: #555; font-size: 12px; }
@@ -20,8 +20,8 @@
 </div>
 
 <div id="canvas-container">
-    <div id="status-display">System Booting...</div>
-    <div id="v-tag">v5.5.7 (Final Recovery)</div>
+    <div id="status-display">System Ready. Click Pink Button.</div>
+    <div id="v-tag">v5.6.3 (Front View Align)</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -36,76 +36,66 @@
 
     function init() {
         try {
-            if (typeof THREE === 'undefined') {
-                status.innerText = "Error: Three.js not loaded. Check internet.";
-                status.style.color = "red";
-                return;
-            }
-
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x111111);
             
+            // 카메라 위치 수정: 정면(Z축 정방향)에서 바라보도록 설정
             camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(50, 50, 50);
+            camera.position.set(0, 30, 70); // X를 0으로 두어 정면 배치
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth - 80, window.innerHeight);
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
+            // 그리드 추가
             scene.add(new THREE.GridHelper(100, 20, 0x444444, 0x222222));
             scene.add(new THREE.AmbientLight(0xffffff, 1));
+            
+            let sun = new THREE.DirectionalLight(0xffffff, 0.5);
+            sun.position.set(10, 20, 10);
+            scene.add(sun);
 
             controls = new THREE.OrbitControls(camera, renderer.domElement);
-            
+            controls.enableDamping = true;
+            controls.rotateSpeed = 0.5;
+
             window.addEventListener('pointerdown', onDown);
             window.addEventListener('pointermove', onMove);
             window.addEventListener('pointerup', onUp);
-
-            status.innerText = "System Ready. Click Pink Button.";
-            status.style.color = "#0f0";
             
             animate();
         } catch (e) {
             status.innerText = "Init Error: " + e.message;
-            status.style.color = "red";
         }
     }
 
     window.handleSpawn = function() {
         if (egg) return;
-        try {
-            const points = [];
-            for (let i = 0; i <= 20; i++) {
-                const t = i / 20;
-                const y = t * BASE_H;
-                const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
-                points.push(new THREE.Vector2(Math.max(0.1, r), y));
-            }
-            const geo = new THREE.LatheGeometry(points, 32);
-            const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
-            egg = new THREE.Mesh(geo, mat);
-            scene.add(egg);
-
-            const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
-            topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff }));
-            bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff }));
-            moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 }));
-            rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 }));
-
-            [topH, bottomH, moveH, rightH].forEach(h => { h.visible = false; scene.add(h); });
-
-            status.innerText = "Egg Active. Click Egg to Edit.";
-        } catch (e) {
-            status.innerText = "Spawn Error: " + e.message;
+        const points = [];
+        for (let i = 0; i <= 20; i++) {
+            const t = i / 20;
+            const y = t * BASE_H;
+            const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
+        const geo = new THREE.LatheGeometry(points, 32);
+        const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
+        egg = new THREE.Mesh(geo, mat);
+        scene.add(egg);
+
+        const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
+        topH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x007bff })); // Dark Blue (Top Scale)
+        bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); // Light Blue (Bottom Scale)
+        moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); // Green (Move)
+        rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); // Deep Blue (Right Scale)
+
+        [topH, bottomH, moveH, rightH].forEach(h => { h.visible = false; scene.add(h); });
+        status.innerText = "Egg Active. Click Egg to Edit.";
     };
 
     function onDown(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        const mouse = new THREE.Vector2(
-            ((e.clientX - rect.left) / rect.width) * 2 - 1,
-            -((e.clientY - rect.top) / rect.height) * 2 + 1
-        );
+        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
@@ -114,14 +104,14 @@
             if (hits.length > 0) {
                 const obj = hits[0].object;
                 if (obj === egg) {
-                    topH.visible = bottomH.visible = moveH.visible = rightH.visible = true;
+                    [topH, bottomH, moveH, rightH].forEach(h => h.visible = true);
                 } else {
                     dragTarget = obj;
                     controls.enabled = false;
                     prevX = e.clientX; prevY = e.clientY;
                 }
             } else {
-                [topH, bottomH, moveH, rightH].forEach(h => { if(h) h.visible = false; });
+                [topH, bottomH, moveH, rightH].forEach(h => h.visible = false);
             }
         }
     }
@@ -140,25 +130,26 @@
             egg.position.y -= (egg.scale.y - oldS) * BASE_H;
         } else if (dragTarget === rightH) {
             const oldS = egg.scale.x;
-            egg.scale.x = Math.max(0.1, oldS + dx * 0.01);
+            egg.scale.x = Math.max(0.1, oldS + dx * 0.02); // 감도 조절
             egg.position.x += (egg.scale.x - oldS) * (BASE_R / 2);
         }
     }
 
-    function onUp() { dragTarget = null; if (controls) controls.enabled = true; }
+    function onUp() { dragTarget = null; controls.enabled = true; }
 
     function animate() {
         requestAnimationFrame(animate);
-        if (egg && topH && bottomH && moveH && rightH) {
+        if (egg && topH) {
             const curH = BASE_H * egg.scale.y, curR = BASE_R * egg.scale.x;
             const bY = egg.position.y, tY = bY + curH, cX = egg.position.x;
             topH.position.set(cX, tY, egg.position.z);
             moveH.position.set(cX, tY + 4, egg.position.z);
             bottomH.position.set(cX, bY, egg.position.z);
+            // 오른쪽 핸들을 X축 끝점에 고정
             rightH.position.set(cX + curR, bY + (curH / 2), egg.position.z);
         }
-        if (renderer) renderer.render(scene, camera);
-        if (controls) controls.update();
+        renderer.render(scene, camera);
+        controls.update();
     }
 
     window.onload = init;
