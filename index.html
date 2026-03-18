@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.6</title>
+    <title>Build-A-Crochet v5.6.7</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -21,14 +21,14 @@
 
 <div id="canvas-container">
     <div id="status-display">System Ready. Click Pink Button.</div>
-    <div id="v-tag">Build-A-Crochet Engine v5.6.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.6.7</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    let scene, camera, renderer, controls, egg, topH, bottomH, moveH, rightH;
+    let scene, camera, renderer, controls, egg, topH, bottomH, moveH, rightH, leftH;
     let dragTarget = null;
     let prevX = 0, prevY = 0;
     const BASE_H = 20, BASE_R = 7;
@@ -69,14 +69,11 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        geo.translate(BASE_R, 0, 0); // Pivot을 왼쪽 끝으로 설정
+        geo.translate(BASE_R, 0, 0); // Pivot: Left Edge
         
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
-        
-        // 💡 핵심: 소환 시 위치를 왼쪽으로 BASE_R만큼 옮겨서 '시각적 중심'을 맞춤
-        egg.position.x = -BASE_R; 
-        
+        egg.position.x = -BASE_R; // Start Centered
         scene.add(egg);
 
         const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
@@ -84,9 +81,10 @@
         bottomH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00d4ff })); 
         moveH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x28a745 })); 
         rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); 
+        leftH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x00ffff })); // Cyan (Left Scale)
 
-        [topH, bottomH, moveH, rightH].forEach(h => { h.visible = false; scene.add(h); });
-        status.innerText = "Egg Centered. Click Egg to Edit.";
+        [topH, bottomH, moveH, rightH, leftH].forEach(h => { h.visible = false; scene.add(h); });
+        status.innerText = "Egg Ready. 5 Handles Active.";
     };
 
     function onDown(e) {
@@ -96,12 +94,12 @@
         raycaster.setFromCamera(mouse, camera);
 
         if (egg) {
-            const hits = raycaster.intersectObjects([topH, bottomH, moveH, rightH, egg].filter(o => o && (o.visible || o === egg)));
+            const hits = raycaster.intersectObjects([topH, bottomH, moveH, rightH, leftH, egg].filter(o => o && (o.visible || o === egg)));
             if (hits.length > 0) {
                 const obj = hits[0].object;
-                if (obj === egg) { [topH, bottomH, moveH, rightH].forEach(h => h.visible = true); }
+                if (obj === egg) { [topH, bottomH, moveH, rightH, leftH].forEach(h => h.visible = true); }
                 else { dragTarget = obj; controls.enabled = false; prevX = e.clientX; prevY = e.clientY; }
-            } else { [topH, bottomH, moveH, rightH].forEach(h => h.visible = false); }
+            } else { [topH, bottomH, moveH, rightH, leftH].forEach(h => h.visible = false); }
         }
     }
 
@@ -118,8 +116,16 @@
             egg.scale.y = Math.max(0.1, oldS - dy * 0.01);
             egg.position.y -= (egg.scale.y - oldS) * BASE_H;
         } else if (dragTarget === rightH) {
-            // Pivot이 왼쪽 끝에 있으므로 오른쪽으로만 늘어남
+            // 오른쪽으로만 늘리기 (왼쪽 고정)
             egg.scale.x = Math.max(0.1, egg.scale.x + dx * 0.02);
+        } else if (dragTarget === leftH) {
+            // 왼쪽으로만 늘리기 (오른쪽 고정)
+            const oldS = egg.scale.x;
+            const newS = Math.max(0.1, oldS - dx * 0.02);
+            const diff = newS - oldS;
+            egg.scale.x = newS;
+            // 스케일이 변하는 만큼 전체 위치를 반대로 밀어줌
+            egg.position.x -= diff * (BASE_R * 2);
         }
     }
 
@@ -135,6 +141,7 @@
             moveH.position.set(cX + curR, tY + 4, egg.position.z);
             bottomH.position.set(cX + curR, bY, egg.position.z);
             rightH.position.set(cX + (curR * 2), bY + (curH / 2), egg.position.z);
+            leftH.position.set(cX, bY + (curH / 2), egg.position.z);
         }
         renderer.render(scene, camera);
         controls.update();
