@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.9</title>
+    <title>Build-A-Crochet v5.7.0</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -19,7 +19,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.6.9</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.7.0</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -27,7 +27,7 @@
 
 <script>
     let scene, camera, renderer, controls, egg;
-    let topH, bottomH, moveH, rightH, leftH, frontH;
+    let topH, bottomH, moveH, rightH, leftH, frontH, backH;
     let dragTarget = null;
     let plane = new THREE.Plane();
     let planeIntersect = new THREE.Vector3();
@@ -39,7 +39,7 @@
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x111111);
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-        camera.position.set(40, 30, 60);
+        camera.position.set(50, 40, 70);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
@@ -67,11 +67,11 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        geo.translate(BASE_R, 0, BASE_R); // Pivot: Left-Back
+        geo.translate(BASE_R, 0, BASE_R); // Pivot 설정
         
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
-        egg.position.set(-BASE_R, 0, -BASE_R); // Center
+        egg.position.set(-BASE_R, 0, -BASE_R);
         scene.add(egg);
 
         const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
@@ -88,8 +88,7 @@
         rightH = makeH(0x0056b3);  // 우
         leftH = makeH(0x00ffff);   // 좌
         frontH = makeH(0xffff00);  // 전 (노란색)
-
-        document.getElementById('v-tag').innerText += " - Ready";
+        backH = makeH(0xffa500);   // 후 (주황색)
     };
 
     function onDown(e) {
@@ -98,24 +97,23 @@
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(mouse, camera);
 
-        const targets = [topH, bottomH, moveH, rightH, leftH, frontH, egg];
+        const targets = [topH, bottomH, moveH, rightH, leftH, frontH, backH, egg];
         const hits = raycaster.intersectObjects(targets.filter(o => o && (o.visible || o === egg)));
         
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (obj === egg) {
-                [topH, bottomH, moveH, rightH, leftH, frontH].forEach(h => h.visible = true);
+                [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = true);
             } else {
                 dragTarget = obj;
                 controls.enabled = false;
-                // 평면 설정: 상하 조작은 정면 평면(XY), 좌우전후는 바닥 평면(XZ)
                 const normal = (dragTarget === topH || dragTarget === bottomH || dragTarget === moveH) ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
                 plane.setFromNormalAndCoplanarPoint(normal, dragTarget.position);
                 raycaster.ray.intersectPlane(plane, planeIntersect);
                 dragStartOffset.copy(planeIntersect).sub(dragTarget.position);
             }
         } else {
-            [topH, bottomH, moveH, rightH, leftH, frontH].forEach(h => h.visible = false);
+            [topH, bottomH, moveH, rightH, leftH, frontH, backH].forEach(h => h.visible = false);
         }
     }
 
@@ -145,6 +143,10 @@
                 egg.scale.x = Math.max(0.1, (oldRightX - pos.x) / (BASE_R * 2));
             } else if (dragTarget === frontH) {
                 egg.scale.z = Math.max(0.1, (pos.z - egg.position.z) / (BASE_R * 2));
+            } else if (dragTarget === backH) {
+                const oldFrontZ = egg.position.z + (BASE_R * 2 * egg.scale.z);
+                egg.position.z = pos.z;
+                egg.scale.z = Math.max(0.1, (oldFrontZ - pos.z) / (BASE_R * 2));
             }
         }
     }
@@ -164,6 +166,7 @@
             rightH.position.set(lX + curW, bY + curH/2, midZ);
             leftH.position.set(lX, bY + curH/2, midZ);
             frontH.position.set(midX, bY + curH/2, bZ + curD);
+            backH.position.set(midX, bY + curH/2, bZ);
         }
         renderer.render(scene, camera);
         controls.update();
