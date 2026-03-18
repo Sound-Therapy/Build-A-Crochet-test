@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.13.0</title>
+    <title>Build-A-Crochet v5.14.0</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.13.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.14.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="changeColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #e91e63;" onclick="changeColor('#e91e63')"></div>
@@ -52,8 +52,9 @@
     let isPlacementMode = false, dragTarget = null;
     let moveV, moveX, moveZ, rotX_H, rotY_H, rotZ_H;
     let topH, bottomH, leftH, rightH, frontH, backH;
-    let history = [];
+    let history = []; 
     let startRotation = new THREE.Quaternion(), startScale = new THREE.Vector3(), startPos = new THREE.Vector3();
+    let startMouseAngle = 0;
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7;
 
@@ -69,7 +70,7 @@
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         
         createHandles();
-        createGhost(); // 💡 반드시 핸들 생성 후 고스트 생성
+        createGhost();
 
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
@@ -102,6 +103,7 @@
         ghostEgg = createEggMesh(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg);
     }
 
+    // 💡 핵심: 상태 저장 로직 (현재 씬의 스냅샷 생성)
     function saveState() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
         const state = eggs.map(egg => ({
@@ -113,13 +115,12 @@
 
     window.undo = function() {
         if (history.length === 0) return;
-        const lastJson = history.pop();
-        const lastState = JSON.parse(lastJson);
+        const lastState = JSON.parse(history.pop());
         
-        // 기존 에그 모두 제거
+        // 1. 모든 기존 에그 제거
         scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
         
-        // 상태 복구
+        // 2. 히스토리에서 가져온 에그들 복원
         lastState.forEach(d => {
             const egg = createEggMesh(new THREE.Color(d.color));
             egg.position.copy(d.pos); egg.quaternion.copy(d.rot); egg.scale.copy(d.scale);
@@ -136,7 +137,7 @@
     }
 
     function spawnEgg(pos) {
-        saveState();
+        saveState(); // 생성 전 상태 저장
         const egg = createEggMesh(0xff69b4);
         egg.position.copy(pos); egg.position.y += 10;
         scene.add(egg); selectEgg(egg); togglePlacementMode();
@@ -148,10 +149,7 @@
             m.visible = false; scene.add(m); return m; 
         };
         moveV = makeH(0x28a745); moveX = makeH(0xff0000); moveZ = makeH(0x0000ff);
-        topH = makeH(0x007bff); bottomH = makeH(0x00d4ff); 
-        leftH = makeH(0xffff00); rightH = makeH(0xffa500);
-        frontH = makeH(0xff00ff); backH = makeH(0x00ffff);
-        
+        topH = makeH(0x007bff); bottomH = makeH(0x00d4ff); leftH = makeH(0xffff00); rightH = makeH(0xffa500); frontH = makeH(0xff00ff); backH = makeH(0x00ffff);
         const createRing = (color) => {
             const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.2, 16, 64), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.4 }));
             r.visible = false; scene.add(r); return r;
@@ -189,7 +187,8 @@
         if (hits.length > 0) {
             const obj = hits[0].object;
             if (interactables.includes(obj)) {
-                saveState(); dragTarget = obj; controls.enabled = false;
+                saveState(); // 💡 조작 시작 시점에 즉시 저장 (Undo를 위해 필수)
+                dragTarget = obj; controls.enabled = false;
                 startRotation.copy(currentEgg.quaternion);
                 startScale.copy(currentEgg.scale);
                 startPos.copy(currentEgg.position);
