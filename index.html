@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.6.5</title>
+    <title>Build-A-Crochet v5.6.6</title>
     <style>
         body { margin: 0; background-color: #111; color: #0f0; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #222; border-right: 1px solid #444; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; background: #ff69b4; border: 2px solid #fff; border-radius: 10px; cursor: pointer; box-shadow: 0 0 10px rgba(255,105,180,0.5); }
         #canvas-container { flex-grow: 1; position: relative; background: #000; }
         #status-display { position: absolute; top: 10px; left: 10px; z-index: 200; pointer-events: none; }
-        #v-tag { position: absolute; bottom: 10px; right: 15px; color: #777; font-size: 12px; font-weight: bold; z-index: 200; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #666; font-size: 12px; font-weight: bold; z-index: 200; }
     </style>
 </head>
 <body>
@@ -21,7 +21,7 @@
 
 <div id="canvas-container">
     <div id="status-display">System Ready. Click Pink Button.</div>
-    <div id="v-tag">Build-A-Crochet Engine v5.6.5</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.6.6</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -69,12 +69,14 @@
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32);
-        
-        // 💡 핵심 수정: 에그의 왼쪽 끝을 Pivot(0)에 맞추기 위해 전체를 오른쪽으로 이동
-        geo.translate(BASE_R, 0, 0); 
+        geo.translate(BASE_R, 0, 0); // Pivot을 왼쪽 끝으로 설정
         
         const mat = new THREE.MeshPhongMaterial({ color: 0xff69b4, wireframe: true, transparent: true, opacity: 0.8 });
         egg = new THREE.Mesh(geo, mat);
+        
+        // 💡 핵심: 소환 시 위치를 왼쪽으로 BASE_R만큼 옮겨서 '시각적 중심'을 맞춤
+        egg.position.x = -BASE_R; 
+        
         scene.add(egg);
 
         const hGeo = new THREE.SphereGeometry(1.2, 16, 16);
@@ -84,7 +86,7 @@
         rightH = new THREE.Mesh(hGeo, new THREE.MeshBasicMaterial({ color: 0x0056b3 })); 
 
         [topH, bottomH, moveH, rightH].forEach(h => { h.visible = false; scene.add(h); });
-        status.innerText = "Egg Active. Click Egg to Edit.";
+        status.innerText = "Egg Centered. Click Egg to Edit.";
     };
 
     function onDown(e) {
@@ -110,15 +112,13 @@
         prevX = e.clientX; prevY = e.clientY;
 
         if (dragTarget === moveH) egg.position.y += dy * 0.1;
-        else if (dragTarget === topH) {
-            egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
-        }
+        else if (dragTarget === topH) egg.scale.y = Math.max(0.1, egg.scale.y + dy * 0.01);
         else if (dragTarget === bottomH) {
             const oldS = egg.scale.y;
             egg.scale.y = Math.max(0.1, oldS - dy * 0.01);
             egg.position.y -= (egg.scale.y - oldS) * BASE_H;
         } else if (dragTarget === rightH) {
-            // 이제 Pivot이 왼쪽 끝에 있으므로 단순 스케일만으로 오른쪽으로 늘어납니다!
+            // Pivot이 왼쪽 끝에 있으므로 오른쪽으로만 늘어남
             egg.scale.x = Math.max(0.1, egg.scale.x + dx * 0.02);
         }
     }
@@ -131,11 +131,9 @@
             const curH = BASE_H * egg.scale.y, curR = BASE_R * egg.scale.x;
             const bY = egg.position.y, tY = bY + curH, cX = egg.position.x;
             
-            // Pivot이 왼쪽 끝(cX)이므로, 중앙 좌표는 cX + curR입니다.
             topH.position.set(cX + curR, tY, egg.position.z);
             moveH.position.set(cX + curR, tY + 4, egg.position.z);
             bottomH.position.set(cX + curR, bY, egg.position.z);
-            // 오른쪽 핸들은 끝점(cX + 2*curR)에 위치
             rightH.position.set(cX + (curR * 2), bY + (curH / 2), egg.position.z);
         }
         renderer.render(scene, camera);
