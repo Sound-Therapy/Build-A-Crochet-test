@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.28.2 - Master Trinity</title>
+    <title>Build-A-Crochet v5.29.0 - Box Select</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -12,8 +12,10 @@
         .undo-btn { background: #333; color: white; }
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
-        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: repeat(2, 1fr); gap: 5px; border: 1px solid #ccc; }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: repeat(2, 1fr); gap: 5px; border: 1px solid #ccc; z-index: 200; }
         .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
+        /* ⭐ 박스 선택 UI 스타일 */
+        #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
 <body>
@@ -24,12 +26,13 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.28.2</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.29.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
         <div class="color-dot" style="background: #000000;" onclick="updateColor('#000000')"></div>
     </div>
+    <div id="select-box"></div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -40,6 +43,10 @@
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let startScale, startPos, startRotation, mouseButton;
+    // ⭐ 박스 선택 관련 변수
+    let isBoxSelecting = false, boxStart = new THREE.Vector2(), currentSelection = [];
+    let selectBoxEl = document.getElementById('select-box');
+    
     let history = [];
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
@@ -84,6 +91,7 @@
     }
 
     function updateMesh(egg) {
+        if(!egg) return;
         const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos;
         const { scale, offsets } = egg.userData.data;
         const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
@@ -115,34 +123,81 @@
         rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
     }
 
+    // ⭐ 다중 선택 시 시각적 효과 처리
+    function updateSelectionVisuals(selectedEggs) {
+        // 기존 선택 해제 (아웃라인 두께 원복)
+        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
+        currentSelection = selectedEggs;
+        
+        if (selectedEggs.length === 0) {
+            deselectAllHandles(); return;
+        }
+        
+        // 다중 선택된 에그들 아웃라인 강조
+        selectedEggs.forEach(e => e.userData.outline.scale.set(1.08, 1.08, 1.08));
+
+        // 핸들은 첫 번째 선택된 에그에만 표시 (변형용 pivot)
+        currentEgg = selectedEggs[0];
+        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
+        document.getElementById('palette').style.display = 'grid';
+    }
+
+    function deselectAllHandles() {
+        currentEgg = null; currentSelection = [];
+        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
+        document.getElementById('palette').style.display = 'none';
+        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
+    }
+
     function onDown(e) {
+        if (e.target.tagName !== 'CANVAS') return; // UI 클릭 시 무시
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+
         if (isPlacementMode && e.button === 0) {
             let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) spawnEgg(intersect); return;
         }
+
         const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)]);
         if (hits.length > 0) {
             dragTarget = hits[0].object; controls.enabled = false; isDragging = true; mouseButton = e.button;
-            if(dragTarget.userData.isEgg) { currentEgg = dragTarget; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true); document.getElementById('palette').style.display = 'grid'; }
-            startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
+            if(dragTarget.userData.isEgg) {
+                // 단일 선택
+                if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
+                // Ctrl + 좌클릭으로 추가 선택 (다중 선택 상태 유지)
+                else if (e.ctrlKey && e.button === 0 && !currentSelection.includes(dragTarget)) {
+                    currentSelection.push(dragTarget); updateSelectionVisuals(currentSelection);
+                }
+            }
+            startRotation = currentEgg ? currentEgg.quaternion.clone() : null;
+            startPos = currentEgg ? currentEgg.position.clone() : null;
             if(dragTarget.userData.isHandle) { startScale = currentEgg.userData.data.scale.clone(); }
             const sPos = dragTarget.position.clone().project(camera);
             startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
-        } else if (e.button === 0 && !e.target.classList.contains('color-dot')) { currentEgg = null; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false); document.getElementById('palette').style.display = 'none'; }
+        } else if (e.button === 0 && !e.ctrlKey) {
+            // ⭐ 빈 공간 클릭 시 박스 선택 시작
+            isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
+            selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
+            deselectAllHandles();
+        }
     }
 
     function onMove(e) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        if (isBoxSelecting) {
+            // ⭐ 박스 선택 시 UI 갱신
+            const x = Math.min(boxStart.x, e.clientX), y = Math.min(boxStart.y, e.clientY);
+            const w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
+            selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
+        }
         if (isPlacementMode) {
-            const rect = renderer.domElement.getBoundingClientRect();
             const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
             const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
             let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; }
             return;
         }
         if (!dragTarget || !currentEgg) return;
-        const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
@@ -153,41 +208,32 @@
             currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle)));
         } else if (dragTarget.userData.isEgg) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) currentEgg.position.copy(intersect);
+            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) {
+                // 다중 이동 (Ctrl 안 누르고 드래그 시)
+                if(!e.ctrlKey || mouseButton !== 0) {
+                    const diff = intersect.sub(currentEgg.position); currentSelection.forEach(e => e.position.add(diff));
+                } else { // Ctrl + 좌클릭 자유 변형 중 이동 방지
+                    currentEgg.position.copy(intersect);
+                }
+            }
         } else if (dragTarget.userData.isHandle) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             let intersect = new THREE.Vector3();
             if (raycaster.ray.intersectPlane(plane, intersect)) {
                 const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const data = currentEgg.userData.data, id = dragTarget.userData.id;
-                
-                if (mouseButton === 0 && !e.ctrlKey) { 
-                    // 1. 좌클릭: 모든 방향 크기 변형 (Uniform Scale)
+                // ⭐ Trinitiy Logic 유지
+                if (mouseButton === 0 && !e.ctrlKey) {
                     const dir = (id === 0 || id === 3 || id === 4) ? 1 : -1;
                     const ds = (id < 2 ? localDiff.y : (id < 4 ? localDiff.x : localDiff.z)) * dir / (id < 2 ? BASE_H : BASE_R * 2) * SENSITIVITY;
                     data.scale.addScalar(ds); data.scale.x = Math.max(0.1, data.scale.x); data.scale.y = Math.max(0.1, data.scale.y); data.scale.z = Math.max(0.1, data.scale.z);
                     const moveDist = (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0));
                     currentEgg.position.copy(startPos).add(new THREE.Vector3(0, moveDist, 0).applyQuaternion(currentEgg.quaternion));
-                } else if (mouseButton === 2) { 
-                    // 2. 우클릭: 한 방향 크기 변형 (Single-Axis Scale)
-                    if (id < 2) { // Y
-                        const dir = id === 0 ? 1 : -1;
-                        const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY;
-                        data.scale.y = Math.max(0.1, startScale.y + ds);
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion));
-                    } else if (id < 4) { // X
-                        const dir = id === 3 ? 1 : -1;
-                        const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY;
-                        data.scale.x = Math.max(0.1, startScale.x + ds);
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion));
-                    } else { // Z
-                        const dir = id === 4 ? 1 : -1;
-                        const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY;
-                        data.scale.z = Math.max(0.1, startScale.z + ds);
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion));
-                    }
-                } else if (mouseButton === 0 && e.ctrlKey) { 
-                    // 3. Ctrl + 좌클릭: 자유 변형 (v5.25.2 Offset 찌그러뜨리기)
+                } else if (mouseButton === 2) {
+                    if (id < 2) { const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (id < 4) { const dir = id === 3 ? 1 : -1; const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.x = Math.max(0.1, startScale.x + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else { const dir = id === 4 ? 1 : -1; const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.z = Math.max(0.1, startScale.z + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
+                } else if (mouseButton === 0 && e.ctrlKey) {
                     data.offsets[id].add(localDiff);
                 }
                 updateMesh(currentEgg);
@@ -195,36 +241,47 @@
         }
     }
 
-    function onUp() { if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; }
+    function onUp(e) {
+        if (isBoxSelecting) {
+            // ⭐ 박스 선택 완료 및 객체 판별
+            isBoxSelecting = false; selectBoxEl.style.display = 'none';
+            const rect = renderer.domElement.getBoundingClientRect();
+            const minX = Math.min(boxStart.x, e.clientX), minY = Math.min(boxStart.y, e.clientY);
+            const maxX = Math.max(boxStart.x, e.clientX), maxY = Math.max(boxStart.y, e.clientY);
+            if(Math.abs(maxX-minX) < 5 && Math.abs(maxY-minY) < 5) return; // 너무 작으면 클릭으로 간주
+
+            const eggs = scene.children.filter(o => o.userData.isEgg);
+            const selected = eggs.filter(egg => {
+                const screenPos = egg.position.clone().project(camera);
+                const x = (screenPos.x + 1) * rect.width / 2 + rect.left;
+                const y = (1 - screenPos.y) * rect.height / 2 + rect.top;
+                return (x >= minX && x <= maxX && y >= minY && y <= maxY);
+            });
+            updateSelectionVisuals(selected);
+        }
+        if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true;
+    }
+
     function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
     function captureState() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
-        const state = eggs.map(e => ({
-            pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w},
-            scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex()
-        }));
+        const state = eggs.map(e => ({ pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w}, scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex() }));
         history.push(JSON.stringify(state)); if (history.length > 50) history.shift();
     }
     window.executeUndo = function() {
         if (history.length < 2) return; history.pop(); const state = JSON.parse(history[history.length - 1]);
         scene.children.filter(o => o.userData.isEgg).forEach(e => { e.geometry.dispose(); e.material.dispose(); scene.remove(e); });
-        state.forEach(d => {
-            const e = createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x, d.pos.y, d.pos.z); e.quaternion.set(d.rot.x, d.rot.y, d.rot.z, d.rot.w);
-            e.userData.data.scale.set(d.scale.x, d.scale.y, d.scale.z); e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z));
-            updateMesh(e); scene.add(e);
-        });
+        state.forEach(d => { const e = createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x, d.pos.y, d.pos.z); e.quaternion.set(d.rot.x, d.rot.y, d.rot.z, d.rot.w); e.userData.data.scale.set(d.scale.x, d.scale.y, d.scale.z); e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)); updateMesh(e); scene.add(e); });
+        deselectAllHandles();
     };
     function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
-    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); togglePlacementMode(); }
+    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); updateSelectionVisuals([egg]); togglePlacementMode(); }
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg) {
             const { scale, offsets } = currentEgg.userData.data, p = currentEgg.position, q = currentEgg.quaternion;
             const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
-            handles.forEach((h, i) => {
-                const lP = ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET));
-                h.position.copy(p).add(lP.applyQuaternion(q));
-            });
+            handles.forEach((h, i) => { const lP = ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET)); h.position.copy(p).add(lP.applyQuaternion(q)); });
             [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2); });
         }
         renderer.render(scene, camera); controls.update();
