@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.26.2 - Core Stability</title>
+    <title>Build-A-Crochet v5.26.3 - Right-Click Control</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.26.2</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.26.3</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -41,49 +41,42 @@
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false, isBoxSelecting = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
-    let startScale, startPos, startRotation, mouseButton, startOffset, startMouseAngle;
+    let startScale, startPos, startRotation, startOffset, startMouseAngle;
     
-    // Grouping
     let selectedEggs = [], groupManager, groupGizmo;
     let boxStart = new THREE.Vector2(), selectBoxEl = document.getElementById('select-box');
     
     let history = [];
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const BASE_H = 20, BASE_R = 7, H_OFFSET = 7, SENSITIVITY = 0.7;
+    const BASE_H = 20, BASE_R = 7, H_OFFSET = 7, SENSITIVITY = 0.8;
 
     function init() {
-        try {
-            scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
-            camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
-            camera.position.set(60, 50, 80);
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth - 80, window.innerHeight);
-            document.getElementById('canvas-container').appendChild(renderer.domElement);
-            renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+        camera.position.set(60, 50, 80);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 80, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-            scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
-            scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
+        scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
 
-            controls = new THREE.OrbitControls(camera, renderer.domElement);
-            controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        // 💡 왼클릭은 화면 회전만 담당
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
 
-            groupManager = new THREE.Group();
-            scene.add(groupManager);
-
-            createHandles();
-            createGhost();
-            createGroupGizmo();
-            
-            window.addEventListener('pointerdown', onDown);
-            window.addEventListener('pointermove', onMove);
-            window.addEventListener('pointerup', onUp);
-            
-            captureState();
-            animate();
-            console.log("v5.26.2 Engine Ready");
-        } catch (e) { console.error("Init Error:", e); }
+        groupManager = new THREE.Group(); scene.add(groupManager);
+        createHandles(); createGhost(); createGroupGizmo();
+        
+        window.addEventListener('pointerdown', onDown);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        
+        captureState();
+        animate();
     }
 
     function createEgg(color, isGhost = false) {
@@ -106,7 +99,7 @@
     }
 
     function updateMesh(egg) {
-        if(!egg || !egg.geometry) return;
+        if(!egg) return;
         const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos;
         const { scale, offsets } = egg.userData.data;
         const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
@@ -131,11 +124,11 @@
             scene.add(m); return m;
         };
         handles = [0,1,2,3,4,5].map(id => makeH(id));
-        const makeR = (col) => {
-            const r = new THREE.Mesh(new THREE.TorusGeometry(20, 0.3, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthTest: false }));
-            r.renderOrder = 998; r.visible = false; scene.add(r); return r;
+        const makeR = (col, axis) => {
+            const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.4, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.5, depthTest: false }));
+            r.renderOrder = 998; r.visible = false; r.userData = { isRotationHandle: true, axis }; scene.add(r); return r;
         };
-        rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
+        rotX_H = makeR(0xff0000, 'x'); rotY_H = makeR(0x00ff00, 'y'); rotZ_H = makeR(0x0000ff, 'z');
     }
 
     function createGroupGizmo() {
@@ -145,10 +138,10 @@
         const pMat = new THREE.MeshBasicMaterial({ color: 0xff69b4, depthTest: false });
         groupGizmo.userData.points = [];
         [ [1,1,1], [1,1,-1], [1,-1,1], [1,-1,-1], [-1,1,1], [-1,1,-1], [-1,-1,1], [-1,-1,-1] ].forEach(c => {
-            const p = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), pMat);
+            const p = new THREE.Mesh(new THREE.SphereGeometry(2, 16, 16), pMat);
             p.userData = { isGroupHandle: true, type: 'scale' }; groupGizmo.add(p); groupGizmo.userData.points.push(p);
         });
-        const rotP = new THREE.Mesh(new THREE.SphereGeometry(2,16,16), new THREE.MeshBasicMaterial({ color: 0xff1493, depthTest: false }));
+        const rotP = new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16), new THREE.MeshBasicMaterial({ color: 0xff1493, depthTest: false }));
         rotP.userData = { isGroupHandle: true, type: 'rotate' }; groupGizmo.add(rotP); groupGizmo.userData.rotPoint = rotP;
     }
 
@@ -172,8 +165,10 @@
         }
 
         const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, groupGizmo.userData.box, ...groupGizmo.userData.points, groupGizmo.userData.rotPoint, ...scene.children.filter(o => o.userData.isEgg), ...groupManager.children]);
-        if (hits.length > 0) {
-            dragTarget = hits[0].object; controls.enabled = false; isDragging = true; mouseButton = e.button;
+        
+        // 💡 물체나 조작계 위에서 오른클릭 시 드래그 시작
+        if (hits.length > 0 && e.button === 2) {
+            dragTarget = hits[0].object; controls.enabled = false; isDragging = true;
             if (dragTarget.userData.isEgg) selectEgg(dragTarget);
             else if (selectedEggs.includes(dragTarget)) dragTarget = groupGizmo.userData.box;
 
@@ -187,7 +182,9 @@
 
             const sPos = dragTarget.getWorldPosition(new THREE.Vector3()).project(camera);
             startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
-        } else if (e.button === 0) {
+        } 
+        // 💡 빈 공간에서 왼클릭 시 드래그 선택 시작
+        else if (hits.length === 0 && e.button === 0) {
             isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
             selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
             deselectAll();
@@ -219,30 +216,42 @@
         let intersect = new THREE.Vector3();
         if (raycaster.ray.intersectPlane(plane, intersect)) {
             const target = currentEgg || groupManager;
+            
+            // 이동 (오른클릭 드래그)
             if (dragTarget.userData.isEgg || dragTarget.userData.isGroupGizmoBody) {
                 target.position.copy(intersect.sub(startOffset));
-            } else if (dragTarget.userData.isHandle) {
+            } 
+            // 개별 회전 (v5.26.3 복구)
+            else if (dragTarget.userData.isRotationHandle) {
+                const sPos = target.position.clone().project(camera);
+                const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+                const axis = new THREE.Vector3(dragTarget.userData.axis === 'x' ? 1 : 0, dragTarget.userData.axis === 'y' ? 1 : 0, dragTarget.userData.axis === 'z' ? 1 : 0);
+                target.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle)));
+            }
+            // 개별 스케일
+            else if (dragTarget.userData.isHandle) {
                 const localDiff = intersect.sub(dragTarget.getWorldPosition(new THREE.Vector3())).applyQuaternion(target.quaternion.clone().invert());
                 const id = dragTarget.userData.id, data = target.userData.data;
-                if (mouseButton === 0) {
-                    if (id < 2) { // Y
-                        const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds);
-                        target.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(target.quaternion));
-                    } else if (id < 4) { // X
-                        const dir = id === 3 ? 1 : -1; const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.x = Math.max(0.1, startScale.x + ds);
-                        target.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(target.quaternion));
-                    } else { // Z
-                        const dir = id === 4 ? 1 : -1; const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.z = Math.max(0.1, startScale.z + ds);
-                        target.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(target.quaternion));
-                    }
-                } else data.offsets[id].add(localDiff);
+                if (id < 2) { // Y
+                    const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds);
+                    target.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(target.quaternion));
+                } else if (id < 4) { // X
+                    const dir = id === 3 ? 1 : -1; const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.x = Math.max(0.1, startScale.x + ds);
+                    target.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(target.quaternion));
+                } else { // Z
+                    const dir = id === 4 ? 1 : -1; const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.z = Math.max(0.1, startScale.z + ds);
+                    target.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(target.quaternion));
+                }
                 updateMesh(target);
-            } else if (dragTarget.userData.isGroupHandle) {
+            } 
+            // 그룹 조작
+            else if (dragTarget.userData.isGroupHandle) {
                 if (dragTarget.userData.type === 'scale') {
                     const ratio = intersect.distanceTo(groupManager.position) / startOffset.length();
                     groupManager.scale.setScalar(Math.max(0.1, startScale.x * ratio));
                 } else {
-                    const angle = Math.atan2(e.clientY - (rect.top + (1 - target.position.clone().project(camera).y) * rect.height / 2), e.clientX - (rect.left + (1 + target.position.clone().project(camera).x) * rect.width / 2));
+                    const sPos = target.position.clone().project(camera);
+                    const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
                     target.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0), -(angle - startMouseAngle)));
                 }
             }
@@ -304,7 +313,7 @@
             groupGizmo.userData.box.scale.copy(size).addScalar(1); groupGizmo.userData.box.position.copy(center);
             const hs = size.multiplyScalar(0.5);
             const pts = [ [1,1,1], [1,1,-1], [1,-1,1], [1,-1,-1], [-1,1,1], [-1,1,-1], [-1,-1,1], [-1,-1,-1] ];
-            groupGizmo.userData.points.forEach((p, i) => p.position.set(center.x + pts[i][0]*(hs.x+1), center.y + pts[i][1]*(hs.y+1), center.z + pts[i][2]*(hs.z+1)));
+            groupGizmo.userData.points.forEach((p, i) => p.position.set(center.x + pts[i][0]*(hs.x+1.5), center.y + pts[i][1]*(hs.y+1.5), center.z + pts[i][2]*(hs.z+1.5)));
             groupGizmo.userData.rotPoint.position.set(center.x, center.y + hs.y + 10, center.z);
         }
         renderer.render(scene, camera); controls.update();
