@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.30.3 - Natural Deformation</title>
+    <title>Build-A-Crochet v5.30.4 - Visual Polish</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.30.3</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.30.4</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -82,11 +82,23 @@
         geo.userData.origPos = geo.attributes.position.clone();
         const mat = new THREE.MeshPhongMaterial({ color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.8 });
         const egg = new THREE.Mesh(geo, mat);
+        
         if (!isGhost) {
             egg.userData.isEgg = true;
             egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: Array.from({length: 6}, () => new THREE.Vector3()) };
-            const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
-            outline.scale.set(1.02, 1.02, 1.02); egg.add(outline); egg.userData.outline = outline;
+            
+            // ⭐ 외곽선 재질 개선: PolygonOffset으로 겹침 방지
+            const outlineMat = new THREE.MeshBasicMaterial({ 
+                color: 0x000000, 
+                side: THREE.BackSide,
+                polygonOffset: true,
+                polygonOffsetFactor: 1,
+                polygonOffsetUnits: 1
+            });
+            const outline = new THREE.Mesh(geo, outlineMat);
+            outline.scale.set(1.02, 1.02, 1.02); 
+            egg.add(outline); 
+            egg.userData.outline = outline;
         }
         return egg;
     }
@@ -106,9 +118,15 @@
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
+        
+        // ⭐ 동적 외곽선 스케일: 물체가 작아지면 외곽선 확장 비율도 조정
+        const avgScale = (scale.x + scale.y + scale.z) / 3;
+        const oS = 1 + (0.02 / Math.max(0.1, avgScale)); 
+        egg.userData.outline.scale.set(oS, oS, oS);
         egg.userData.outline.geometry.attributes.position.copy(pos).needsUpdate = true;
     }
 
+    // --- (이하 나머지 로직은 5.30.3과 동일) ---
     function createHandles() {
         const makeH = (id) => {
             const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
@@ -122,7 +140,6 @@
         };
         rotX_H = makeR(0xff0000, 'x'); rotY_H = makeR(0x00ff00, 'y'); rotZ_H = makeR(0x0000ff, 'z');
     }
-
     function createGroupGizmo() {
         groupGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)), 0xff69b4);
         groupGizmo.visible = false; scene.add(groupGizmo);
@@ -138,14 +155,12 @@
         };
         groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
     }
-
     function updateSelectionVisuals(selected) {
-        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
+        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.visible = true);
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
         groupGizmo.visible = false; document.getElementById('palette').style.display = 'none';
         currentSelection = selected;
         if (selected.length === 0) { currentEgg = null; return; }
-        selected.forEach(e => e.userData.outline.scale.set(1.1, 1.1, 1.1));
         document.getElementById('palette').style.display = 'grid';
         if (selected.length === 1) {
             currentEgg = selected[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
@@ -154,7 +169,6 @@
             updateGroupGizmoVisuals();
         }
     }
-
     function updateGroupGizmoVisuals() {
         if (currentSelection.length < 2) return;
         const box = new THREE.Box3();
@@ -166,31 +180,26 @@
         groupHandles.forEach((h, i) => h.position.copy(center).add(corners[i].clone().multiply(size)));
         groupRotHandles.forEach((r, i) => { r.position.copy(center); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2); });
     }
-
     function getMouseAngle(e, targetObj) {
         const rect = renderer.domElement.getBoundingClientRect();
         const sPos = targetObj.position.clone().project(camera);
         return Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
     }
-
     function onDown(e) {
         if (e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-        
         if (isPlacementMode && e.button === 0) {
             const hits = raycaster.intersectObject(scene.children.find(o => o.type === "GridHelper"));
             if (hits.length > 0) spawnEgg(hits[0].point);
             return;
         }
-
         const gizmoHits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if (gizmoHits.length > 0) {
             dragTarget = gizmoHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             raycaster.ray.intersectPlane(plane, startIntersect);
-            
             if (currentEgg) {
                 startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
                 startScale = currentEgg.userData.data.scale.clone();
@@ -199,7 +208,6 @@
                     const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
                     worldAnchorPos.copy(ctrls[oppId]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
                     startHandleDist = startIntersect.distanceTo(worldAnchorPos);
-                    // ⭐ 자유 변형 시작 시 현재 오프셋 저장
                     dragTarget.userData.startOffset = currentEgg.userData.data.offsets[id].clone();
                 } else { startHandleDist = startIntersect.distanceTo(currentEgg.position); }
                 lastMouseAngle = getMouseAngle(e, currentEgg);
@@ -212,7 +220,6 @@
             }
             return;
         }
-
         const eggHits = raycaster.intersectObjects(scene.children.filter(o => o.userData.isEgg));
         if (eggHits.length > 0) {
             dragTarget = eggHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
@@ -227,23 +234,19 @@
             }
         }
     }
-
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-
         if (isPlacementMode) {
             const hits = raycaster.intersectObject(scene.children.find(o => o.type === "GridHelper"));
-            if (hits.length > 0) { ghostEgg.visible = true; ghostEgg.position.copy(hits[0].point).y += 10; }
+            if (hits.length > 0) { ghostEgg.visible = true; ghostEgg.position.copy(hits[0].point).y += 10.01; }
         }
-
         if (isBoxSelecting) {
             const x = Math.min(boxStart.x, e.clientX), y = Math.min(boxStart.y, e.clientY), w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
             selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
         }
         if (!isDragging || !dragTarget) return;
-
         const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
         if (raycaster.ray.intersectPlane(plane, intersect)) {
@@ -257,21 +260,16 @@
                 } else if (dragTarget.userData.isEgg) { currentEgg.position.copy(intersect); }
                 else if (dragTarget.userData.isHandle) {
                     const id = dragTarget.userData.id, data = currentEgg.userData.data;
-                    
-                    // ⭐ 자연스러운 자유 변형 로직 (5.28.2 스타일 복구)
                     if (mouseButton === 0 && e.ctrlKey) {
                         const worldDelta = intersect.clone().sub(startIntersect);
-                        // 월드 이동량을 로컬로 변환 (역회전 적용)
                         const localDelta = worldDelta.applyQuaternion(currentEgg.quaternion.clone().invert());
                         data.offsets[id].copy(dragTarget.userData.startOffset).add(localDelta);
                         updateMesh(currentEgg);
-                    } 
-                    else {
+                    } else {
                         const curDist = intersect.distanceTo(worldAnchorPos), ratio = Math.max(0.01, curDist / startHandleDist);
                         if (mouseButton === 0) { data.scale.copy(startScale).multiplyScalar(ratio); } 
                         else if (mouseButton === 2) { 
                             const dir = (id < 2) ? 'y' : (id < 4 ? 'x' : 'z'); data.scale.copy(startScale); data.scale[dir] *= ratio;
-                            updateMesh(currentEgg); 
                             const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)], oppId = (id % 2 === 0) ? id + 1 : id - 1;
                             const currentOppPos = ctrls[oppId].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
                             currentEgg.position.add(worldAnchorPos.clone().sub(currentOppPos));
@@ -290,17 +288,13 @@
                     const deltaAngle = currentAngle - lastMouseAngle;
                     const axis = dragTarget.userData.axis === 'x' ? new THREE.Vector3(1,0,0) : dragTarget.userData.axis === 'y' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
                     const rotQ = new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle);
-                    currentSelection.forEach((egg) => {
-                        egg.position.sub(groupCenter).applyQuaternion(rotQ).add(groupCenter);
-                        egg.quaternion.premultiply(rotQ);
-                    });
+                    currentSelection.forEach((egg) => { egg.position.sub(groupCenter).applyQuaternion(rotQ).add(groupCenter); egg.quaternion.premultiply(rotQ); });
                     lastMouseAngle = currentAngle;
                 }
                 updateGroupGizmoVisuals();
             }
         }
     }
-
     function onUp(e) { 
         if (isBoxSelecting) {
             isBoxSelecting = false; selectBoxEl.style.display = 'none';
@@ -317,7 +311,6 @@
         }
         if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; 
     }
-
     function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
     function captureState() {
         const state = scene.children.filter(o => o.userData.isEgg).map(e => ({ pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w}, scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex() }));
