@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.22.0 - Free-Form Sculptor</title>
+    <title>Build-A-Crochet v5.23.0 - Hybrid Sculptor</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -26,11 +26,9 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.22.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.23.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
-        <div class="color-dot" style="background: #2196f3;" onclick="updateColor('#2196f3')"></div>
-        <div class="color-dot" style="background: #4caf50;" onclick="updateColor('#4caf50')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
         <div class="color-dot" style="background: #000000;" onclick="updateColor('#000000')"></div>
     </div>
@@ -43,15 +41,15 @@
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H;
-    // 💡 자유변형점(Control Points) 핸들 배열
-    let controlPoints = []; 
+    // 💡 통합된 6개의 하이브리드 핸들 (상/하/좌/우/앞/뒤)
+    let hybridHandles = []; 
     
     let history = [];
     const MAX_HISTORY = 50;
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7;
-    // 💡 제어점들을 물체에서 띄울 거리 (가시성)
-    const HANDLE_OFFSET = 6; 
+    // 💡 핸들을 물체에서 띄울 거리 (가시성)
+    const HANDLE_OFFSET = 7; 
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
@@ -60,13 +58,19 @@
         
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
-        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        const container = document.getElementById('canvas-container');
+        container.appendChild(renderer.domElement);
         
+        // 💡 우클릭 메뉴 차단 (우클릭 조작용)
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault(), false);
+
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         scene.add(new THREE.AmbientLight(0xffffff, 1.5));
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        
+        // 우클릭은 스컬프팅에 써야하므로, 컨트롤즈의 팬 기능을 좌클릭+Shift 등으로 분리 권장 (우선 팬 차단)
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+
         createHandles();
         createGhost();
 
@@ -77,8 +81,8 @@
         animate();
     }
 
-    // 💡 핵심: FFD(자유변형)가 가능한 에그 메쉬 생성
-    function createSculptableEgg(color, isGhost = false) {
+    // 하이브리드(Scale+FFD)가 가능한 에그 메쉬 생성 (v5.22.0 기반)
+    function createHybridEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20; const y = t * BASE_H;
             const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
@@ -86,7 +90,7 @@
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
         
-        // 💡 중요: 변형을 위해 원본 정점 위치 보관
+        // 중요: 변형을 위해 원본 정점 위치 보관
         geo.userData.origPos = geo.attributes.position.clone(); 
         
         const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.8, depthWrite: !isGhost });
@@ -94,32 +98,40 @@
         
         if (!isGhost) {
             egg.userData.isEgg = true;
-            // 💡 변형 데이터 초기화 (8개의 제어점 오프셋)
-            egg.userData.offsets = [
-                new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
-                new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
-            ];
+            // 💡 하이브리드 데이터 초기화 (전체 Scale + 6개의 FFD 오프셋)
+            // 주의: FFD 오프셋은 6개의 면(상/하/좌/우/앞/뒤) 기준으로 저장
+            egg.userData.scOffs = {
+                scale: new THREE.Vector3(1, 1, 1), // 기본 Scale
+                offsets: [
+                    new THREE.Vector3(), new THREE.Vector3(), // Top, Bottom
+                    new THREE.Vector3(), new THREE.Vector3(), // Left, Right
+                    new THREE.Vector3(), new THREE.Vector3()  // Front, Back
+                ]
+            };
             const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
             outline.scale.set(1.02, 1.02, 1.02); egg.add(outline);
-            egg.userData.outline = outline; // 아웃라인도 나중에 같이 변형
+            egg.userData.outline = outline; 
         }
         return egg;
     }
 
     function createGhost() {
-        ghostEgg = createSculptableEgg(0x28a745, true); 
+        ghostEgg = createHybridEgg(0x28a745, true); 
         ghostEgg.visible = false; ghostEgg.renderOrder = 1000;
         scene.add(ghostEgg);
     }
 
-    // 💡 변형된 데이터까지 포함하여 상태 저장
+    // 하이브리드 데이터까지 포함하여 상태 저장
     function captureState() {
         const eggs = scene.children.filter(o => o.userData.isEgg);
         const state = eggs.map(egg => ({
             pos: egg.position.clone(),
             rot: egg.quaternion.clone(),
-            // 💡 크기(scale)는 이제 의미가 낮음, 제어점 오프셋 저장
-            offsets: egg.userData.offsets.map(v => v.clone()), 
+            // 💡 전체 Scale 및 FFD 오프셋 저장
+            scOffs: {
+                scale: egg.userData.scOffs.scale.clone(),
+                offsets: egg.userData.scOffs.offsets.map(v => v.clone())
+            },
             col: egg.material.color.getHex()
         }));
         const json = JSON.stringify(state);
@@ -139,11 +151,14 @@
     function applyState(stateData) {
         scene.children.filter(o => o.userData.isEgg).forEach(o => { o.geometry.dispose(); o.material.dispose(); scene.remove(o); });
         stateData.forEach(d => {
-            const egg = createSculptableEgg(new THREE.Color(d.col));
+            const egg = createHybridEgg(new THREE.Color(d.col));
             egg.position.copy(d.pos); egg.quaternion.copy(d.rot);
-            // 💡 변형 오프셋 복구 및 메쉬 갱신
-            egg.userData.offsets = d.offsets.map(v => new THREE.Vector3(v.x, v.y, v.z));
-            updateMeshDeformation(egg); 
+            // 💡 하이브리드 데이터 복구 및 메쉬 갱신
+            egg.userData.scOffs = {
+                scale: new THREE.Vector3(d.scOffs.scale.x, d.scOffs.scale.y, d.scOffs.scale.z),
+                offsets: d.scOffs.offsets.map(v => new THREE.Vector3(v.x, v.y, v.z))
+            };
+            updateHybridMesh(egg); 
             scene.add(egg);
         });
         deselectAll();
@@ -156,26 +171,26 @@
     }
 
     function spawnEgg(pos) {
-        const egg = createSculptableEgg(0xff69b4);
+        const egg = createHybridEgg(0xff69b4);
         egg.position.copy(pos); egg.position.y += 10;
         scene.add(egg);
         captureState(); selectEgg(egg); togglePlacementMode();
     }
 
-    // 💡 제어점 및 회전 링 생성
+    // 💡 통합된 하이브리드 핸들 및 회전 링 생성
     function createHandles() {
-        const makeH = (col, id) => { 
-            // 💡 제어점은 파란색 계열, 살짝 더 큼
-            const m = new THREE.Mesh(new THREE.SphereGeometry(2.0, 16, 16), new THREE.MeshBasicMaterial({ color: col, depthTest: false })); 
-            m.renderOrder = 999; m.visible = false; m.userData.isControlPoint = true; m.userData.pointId = id; // 제어점 ID 부여
+        const makeH = (col, id, axis) => { 
+            // 💡 크기 조절/스컬프팅 통합 핸들: 구체, 투톤 암시 (파랑/노랑)
+            const m = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 16), new THREE.MeshBasicMaterial({ color: col, depthTest: false })); 
+            m.renderOrder = 999; m.visible = false; m.userData.isHybridHandle = true; m.userData.handleId = id; // 핸들 ID 부여
+            m.userData.axis = axis; // 주축 (Scale용)
             scene.add(m); return m; 
         };
-        // 💡 8개의 자유변형점 (FFD 제어점)
-        controlPoints = [
-            makeH(0x007bff, 0), makeH(0x007bff, 1), // Top-Back, Top-Front
-            makeH(0x00d4ff, 2), makeH(0x00d4ff, 3), // Bottom-Back, Bottom-Front
-            makeH(0xffff00, 4), makeH(0xffa500, 5), // Left, Right
-            makeH(0xff00ff, 6), makeH(0x00ffff, 7)  // Front, Back (Center)
+        // 💡 6개의 하이브리드 핸들 (상/하/좌/우/앞/뒤)
+        hybridHandles = [
+            makeH(0x007bff, 0, 'y'), makeH(0x00d4ff, 1, 'y'), // Top (Y+), Bottom (Y-)
+            makeH(0xffff00, 2, 'x'), makeH(0xffa500, 3, 'x'), // Left (X-), Right (X+)
+            makeH(0xff00ff, 4, 'z'), makeH(0x00ffff, 5, 'z')  // Front (Z+), Back (Z-)
         ];
         
         const createRing = (color) => {
@@ -187,13 +202,13 @@
 
     function selectEgg(egg) { 
         currentEgg = egg; 
-        [rotX_H, rotY_H, rotZ_H, ...controlPoints].forEach(h => h.visible = true); 
+        [rotX_H, rotY_H, rotZ_H, ...hybridHandles].forEach(h => h.visible = true); 
         document.getElementById('palette').style.display = 'grid'; 
     }
     
     function deselectAll() { 
         currentEgg = null; 
-        [rotX_H, rotY_H, rotZ_H, ...controlPoints].forEach(h => { if(h) h.visible = false; }); 
+        [rotX_H, rotY_H, rotZ_H, ...hybridHandles].forEach(h => { if(h) h.visible = false; }); 
         document.getElementById('palette').style.display = 'none'; 
     }
 
@@ -209,21 +224,24 @@
             if (raycaster.ray.intersectPlane(groundPlane, intersect)) { spawnEgg(intersect); return; }
         }
 
-        const interactables = [rotX_H, rotY_H, rotZ_H, ...controlPoints];
+        const interactables = [rotX_H, rotY_H, rotZ_H, ...hybridHandles];
         const eggs = scene.children.filter(o => o.userData.isEgg);
         const hits = raycaster.intersectObjects([...interactables, ...eggs]);
         
         if (hits.length > 0) {
             const obj = hits[0].object;
-            // 💡 드래그 대상 설정: 제어점, 회전 링, 혹은 에그 몸체
+            // 💡 드래그 대상 설정
             if (interactables.includes(obj) || obj.userData.isEgg) {
                 dragTarget = obj; controls.enabled = false; isDragging = true;
                 if(obj.userData.isEgg) selectEgg(obj);
                 
-                startRotation = currentEgg.quaternion.clone(); 
-                startPos = currentEgg.position.clone();
-                // 💡 제어점 드래그 시 해당 오프셋 보관
-                if(obj.userData.isControlPoint) startOffset = currentEgg.userData.offsets[obj.userData.pointId].clone();
+                startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
+                // 💡 하이브리드 핸들 클릭 시 버튼 종류 기록
+                if(obj.userData.isHybridHandle) {
+                    mouseButton = e.button; // 0: 좌클릭 (Scale), 2: 우클릭 (Sculpt)
+                    // Scale 시작 데이터 보관
+                    startScale = currentEgg.userData.scOffs.scale.clone();
+                }
                 
                 const targetForScreen = obj.userData.isEgg ? obj : obj;
                 const screenPos = targetForScreen.position.clone().project(camera);
@@ -261,8 +279,8 @@
             const plane = new THREE.Plane(planeNormal, -startPos.dot(planeNormal));
             if (raycaster.ray.intersectPlane(plane, intersect)) { currentEgg.position.copy(intersect); }
         }
-        // 💡 자유변형(Sculpting) 조작
-        else if (dragTarget.userData.isControlPoint) {
+        // 💡 하이브리드 핸들 조작 (이도류!)
+        else if (dragTarget.userData.isHybridHandle) {
             let intersect = new THREE.Vector3();
             const planeNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
             const plane = new THREE.Plane(planeNormal, -dragTarget.position.dot(planeNormal));
@@ -272,52 +290,73 @@
                 // 로컬 좌표로 변환 (에그의 회전 고려)
                 const localDiff = diff.clone().applyQuaternion(currentEgg.quaternion.clone().invert());
                 
-                // 💡 해당 제어점의 오프셋 갱신
-                const pointId = dragTarget.userData.pointId;
-                currentEgg.userData.offsets[pointId].add(localDiff);
+                // 💡 기능 분리: 좌클릭 vs 우클릭
+                if (mouseButton === 0) { 
+                    // 💡 좌클릭 (마우스 0): 전체 Scale 조절 (Parametric)
+                    const axis = dragTarget.userData.axis;
+                    const scOffs = currentEgg.userData.scOffs;
+                    // 주축(axis)에 따른 대칭 스케일링 (Y축은 BASE_H, 나머지는 BASE_R 고려)
+                    if (axis === 'y') {
+                        const deltaScale = localDiff.y / BASE_H;
+                        // 대칭으로 커지거나 작아짐 (startPos 고정)
+                        scOffs.scale.y = Math.max(0.1, startScale.y + deltaScale * 2); 
+                    } else if (axis === 'x') { scOffs.scale.x = Math.max(0.1, startScale.x + localDiff.x / BASE_R * 2); }
+                      else if (axis === 'z') { scOffs.scale.z = Math.max(0.1, startScale.z + localDiff.z / BASE_R * 2); }
+                } 
+                else if (mouseButton === 2) { 
+                    // 💡 우클릭 (마우스 2): 국소 FFD 스컬프팅 (Sculpting)
+                    const handleId = dragTarget.userData.handleId;
+                    // 해당 면의 오프셋 갱신
+                    currentEgg.userData.scOffs.offsets[handleId].add(localDiff);
+                }
                 
-                // 💡 핵심: 오프셋 기반으로 메쉬 정점 재계산 (Sculpting 반영)
-                updateMeshDeformation(currentEgg);
+                // 💡 핵심: 하이브리드(Scale+FFD) 메쉬 정점 재계산
+                updateHybridMesh(currentEgg);
             }
         }
     }
 
-    // 💡 수학적 핵심: 8개 제어점 오프셋 기반 FFD 메쉬 변형 로직
-    function updateMeshDeformation(egg) {
+    // 💡 수학적 핵심: Scale 및 6개 면 오프셋 기반 하이브리드 메쉬 변형 로직 (v5.22.0 IDW 기반 개량)
+    function updateHybridMesh(egg) {
         const geo = egg.geometry;
         const origPos = geo.userData.origPos;
         const positions = geo.attributes.position;
-        const offsets = egg.userData.offsets;
+        const scOffs = egg.userData.scOffs;
+        const scale = scOffs.scale;
+        const offsets = scOffs.offsets;
 
-        // 원본 제어점 로컬 위치 (변형 전)
-        const ctrlPoints = [
-            new THREE.Vector3(0, 10, -5), new THREE.Vector3(0, 10, 5), // T-B, T-F
-            new THREE.Vector3(0, -10, -5), new THREE.Vector3(0, -10, 5), // B-B, B-F
-            new THREE.Vector3(-7, 0, 0), new THREE.Vector3(7, 0, 0),     // L, R
-            new THREE.Vector3(0, 0, 7), new THREE.Vector3(0, 0, -7)      // F, B
+        // 원본 제어점 로컬 위치 (변형 전, 6개의 면 중심)
+        const ctrlPointsLocal = [
+            new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -10, 0), // Top (Y+), Bottom (Y-)
+            new THREE.Vector3(-7, 0, 0), new THREE.Vector3(7, 0, 0),   // Left (X-), Right (X+)
+            new THREE.Vector3(0, 0, 7), new THREE.Vector3(0, 0, -7)    // Front (Z+), Back (Z-)
         ];
 
         for (let i = 0; i < origPos.count; i++) {
             const vx = origPos.getX(i); const vy = origPos.getY(i); const vz = origPos.getZ(i);
             const v = new THREE.Vector3(vx, vy, vz);
+            
+            // 💡 1단계: 전체 Scale 적용 (대칭 변형)
+            const scaledV = v.clone().multiply(scale);
+            
+            // 💡 2단계: 국소 FFD 스컬프팅 적용 (IDW 알고리즘)
             let totalWeight = 0;
-            const newV = v.clone();
+            const sculptOff = new THREE.Vector3();
 
-            // 💡 Inverse Distance Weighting (IDW) 알고리즘
-            // 각 정점은 8개 제어점과의 거리에 반비례하는 가중치만큼 영향을 받음
-            for (let j = 0; j < 8; j++) {
-                const dist = v.distanceTo(ctrlPoints[j]);
-                // 가중치 계산 (거리가 가까울수록 가중치가 급격히 커짐)
-                const weight = 1 / Math.pow(dist + 1, 3); // 영향력 범위 조절 (pow, +1)
+            for (let j = 0; j < 6; j++) {
+                // 원본 정점과 해당 면 제어점의 거리 (이 영향력 범위는 Scale과 무관해야 자연스러움)
+                const dist = v.distanceTo(ctrlPointsLocal[j]);
+                // 가중치 계산 (influence range조절)
+                const weight = 1 / Math.pow(dist + 1, 3.5); 
                 totalWeight += weight;
                 // 해당 제어점의 오프셋만큼 정점 이동 (가중치 적용)
-                newV.add(offsets[j].clone().multiplyScalar(weight));
+                sculptOff.add(offsets[j].clone().multiplyScalar(weight));
             }
-            // 가중치 정규화
-            newV.sub(v).divideScalar(totalWeight).add(v);
+            // 가중치 정규화 및 최종 위치 계산
+            const finalV = scaledV.add(sculptOff.divideScalar(totalWeight));
 
             // 갱신된 위치 적용
-            positions.setXYZ(i, newV.x, newV.y, newV.z);
+            positions.setXYZ(i, finalV.x, finalV.y, finalV.z);
         }
         positions.needsUpdate = true; // 메쉬 갱신 알림
         // 아웃라인 메쉬도 동일하게 변형
@@ -331,19 +370,20 @@
         requestAnimationFrame(animate);
         if (currentEgg) {
             const p = currentEgg.position, q = currentEgg.quaternion;
-            const offsets = currentEgg.userData.offsets;
+            const scOffs = currentEgg.userData.scOffs;
+            const scale = scOffs.scale;
+            const offsets = scOffs.offsets;
             
-            // 💡 제어점 위치 업데이트: 로컬 제어점 + 오프셋 -> 월드 좌표
+            // 💡 하이브리드 핸들 위치 업데이트: (로컬 면 중심 * Scale) + 오프셋 -> 월드 좌표
             const ctrlPointsLocal = [
-                new THREE.Vector3(0, 10, -5), new THREE.Vector3(0, 10, 5),
-                new THREE.Vector3(0, -10, -5), new THREE.Vector3(0, -10, 5),
+                new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -10, 0),
                 new THREE.Vector3(-7, 0, 0), new THREE.Vector3(7, 0, 0),
                 new THREE.Vector3(0, 0, 7), new THREE.Vector3(0, 0, -7)
             ];
 
-            controlPoints.forEach((h, i) => {
-                // 원본 로컬 위치 + 현재 변형 오프셋
-                const localPos = ctrlPointsLocal[i].clone().add(offsets[i]);
+            hybridHandles.forEach((h, i) => {
+                // (원본 로컬 위치 * Scale) + 현재 변형 오프셋
+                const localPos = ctrlPointsLocal[i].clone().multiply(scale).add(offsets[i]);
                 // 가시성을 위해 오프셋 방향으로 살짝 띄움 (옵션)
                 const offsetDir = ctrlPointsLocal[i].clone().normalize();
                 localPos.add(offsetDir.multiplyScalar(HANDLE_OFFSET));
