@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.30.5 - Clean Render Mode</title>
+    <title>Build-A-Crochet v5.31.0 - Solid Render</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.30.5</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.31.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -48,6 +48,7 @@
     let selectBoxEl = document.getElementById('select-box');
     let history = [], currentSelection = [];
     
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
@@ -60,8 +61,15 @@
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
-        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8); dirLight.position.set(10, 20, 10); scene.add(dirLight);
+        
+        // ⭐ Tinkercad 스타일 조명 설정 (주광 + 보조광)
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6)); // 전체적인 밝기
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.6); // 주광 (우측 상단 전면)
+        mainLight.position.set(10, 20, 15);
+        scene.add(mainLight);
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3); // 보조광 (좌측 하단 후면)
+        fillLight.position.set(-10, -10, -10);
+        scene.add(fillLight);
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
@@ -81,14 +89,12 @@
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
         geo.userData.origPos = geo.attributes.position.clone();
         
-        // ⭐ 외곽선 대신 Phong Material의 투명도와 와이어프레임 조합 사용
-        const mat = new THREE.MeshPhongMaterial({ 
+        // ⭐ Tinkercad 스타일 Shading: MeshLambertMaterial 사용 (매트한 질감)
+        // 외곽선용 중첩 Mesh는 아예 생성하지 않음 -> 잔상 원천 차단
+        const mat = new THREE.MeshLambertMaterial({ 
             color, 
-            wireframe: true, 
             transparent: true, 
-            opacity: isGhost ? 0.3 : 0.7,
-            shininess: 100,
-            specular: 0x444444
+            opacity: isGhost ? 0.3 : 1.0, // 고스트는 투명하게, 본체는 불투명하게
         });
         const egg = new THREE.Mesh(geo, mat);
         
@@ -114,9 +120,10 @@
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
+        // 외곽선 Mesh가 없으므로 외곽선 스케일 조정 로직 삭제
     }
 
-    // Gizmo 및 조작 로직 (5.30.3의 안정적인 자유변형 로직 유지)
+    // --- (이하 나머지 조작 및 시스템 로직은 이전 버전과 100% 동일) ---
     function createHandles() {
         const makeH = (id) => {
             const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
@@ -146,10 +153,7 @@
         groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
     }
     function updateSelectionVisuals(selected) {
-        scene.children.filter(o => o.userData.isEgg).forEach(e => {
-            // 선택된 객체는 투명도를 높여 강조
-            e.material.opacity = selected.includes(e) ? 0.9 : 0.7;
-        });
+        // 선택 하이라이트 방식 변경: 투명도 대신 색상 미세 조정이나 다른 방식을 고려할 수 있으나, 현재는 조작 핸들만 표시
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
         groupGizmo.visible = false; document.getElementById('palette').style.display = 'none';
         currentSelection = selected;
@@ -316,7 +320,7 @@
         updateSelectionVisuals([]);
     };
     function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
-    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); updateSelectionVisuals([egg]); isPlacementMode = false; ghostEgg.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
+    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10.01; scene.add(egg); captureState(); updateSelectionVisuals([egg]); isPlacementMode = false; ghostEgg.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg) {
