@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.30.2 - Fixed Free Deformation</title>
+    <title>Build-A-Crochet v5.30.3 - Natural Deformation</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.30.2</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.30.3</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -43,12 +43,11 @@
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let groupGizmo, groupHandles = [], groupRotHandles = [];
     let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
-    let startHandleDist = 1, worldAnchorPos = new THREE.Vector3();
+    let startHandleDist = 1, worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3();
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], currentSelection = [];
     
-    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
@@ -190,7 +189,7 @@
         if (gizmoHits.length > 0) {
             dragTarget = gizmoHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-            let intersect = new THREE.Vector3(); raycaster.ray.intersectPlane(plane, intersect);
+            raycaster.ray.intersectPlane(plane, startIntersect);
             
             if (currentEgg) {
                 startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
@@ -199,14 +198,16 @@
                     const id = dragTarget.userData.id, oppId = (id % 2 === 0) ? id + 1 : id - 1;
                     const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
                     worldAnchorPos.copy(ctrls[oppId]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
-                    startHandleDist = intersect.distanceTo(worldAnchorPos);
-                } else { startHandleDist = intersect.distanceTo(currentEgg.position); }
+                    startHandleDist = startIntersect.distanceTo(worldAnchorPos);
+                    // ⭐ 자유 변형 시작 시 현재 오프셋 저장
+                    dragTarget.userData.startOffset = currentEgg.userData.data.offsets[id].clone();
+                } else { startHandleDist = startIntersect.distanceTo(currentEgg.position); }
                 lastMouseAngle = getMouseAngle(e, currentEgg);
             } else if (currentSelection.length > 1) {
                 const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
                 const groupCenter = box.getCenter(new THREE.Vector3());
                 startGroupData = currentSelection.map(e => ({ pos: e.position.clone(), scale: e.userData.data.scale.clone(), rot: e.quaternion.clone() }));
-                startHandleDist = intersect.distanceTo(groupCenter);
+                startHandleDist = startIntersect.distanceTo(groupCenter);
                 lastMouseAngle = getMouseAngle(e, { position: groupCenter });
             }
             return;
@@ -257,15 +258,14 @@
                 else if (dragTarget.userData.isHandle) {
                     const id = dragTarget.userData.id, data = currentEgg.userData.data;
                     
-                    // ⭐ 자유 변형 로직 (Ctrl + 좌클릭) 복구
+                    // ⭐ 자연스러운 자유 변형 로직 (5.28.2 스타일 복구)
                     if (mouseButton === 0 && e.ctrlKey) {
-                        const localI = intersect.clone().applyMatrix4(currentEgg.matrixWorld.clone().invert());
-                        const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
-                        const localS = ctrls[id].clone(); // 핸들의 원래 위치
-                        data.offsets[id].copy(localI.sub(localS)); // 차이만큼 오프셋 적용
+                        const worldDelta = intersect.clone().sub(startIntersect);
+                        // 월드 이동량을 로컬로 변환 (역회전 적용)
+                        const localDelta = worldDelta.applyQuaternion(currentEgg.quaternion.clone().invert());
+                        data.offsets[id].copy(dragTarget.userData.startOffset).add(localDelta);
                         updateMesh(currentEgg);
                     } 
-                    // 일반 크기 조절 (좌클릭 전체 / 우클릭 단방향)
                     else {
                         const curDist = intersect.distanceTo(worldAnchorPos), ratio = Math.max(0.01, curDist / startHandleDist);
                         if (mouseButton === 0) { data.scale.copy(startScale).multiplyScalar(ratio); } 
