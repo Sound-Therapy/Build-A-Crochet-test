@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.26.8 - Fixed Transformation</title>
+    <title>Build-A-Crochet v5.26.9 - Advanced Transform</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.26.8</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.26.9</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -41,7 +41,7 @@
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
-    let startScale, startPos, startRotation, mouseButton, startOffset, startMouseAngle;
+    let startScale, startPos, startRotation, mouseButton, startOffset, startMouseAngle, isCtrlPressed = false;
 
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
@@ -73,6 +73,8 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        window.addEventListener('keydown', (e) => { if(e.key === 'Control') isCtrlPressed = true; });
+        window.addEventListener('keyup', (e) => { if(e.key === 'Control') isCtrlPressed = false; });
         
         captureState();
         animate();
@@ -143,10 +145,8 @@
         
         if (e.button === 2) {
             if (hits.length === 0) {
-                isBoxSelecting = true;
-                boxStart.set(e.clientX, e.clientY);
-                selectBoxEl.style.display = 'block';
-                selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
+                isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
+                selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
                 return;
             }
         }
@@ -181,13 +181,6 @@
             return;
         }
 
-        if (isPlacementMode) {
-            const rect = renderer.domElement.getBoundingClientRect();
-            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; } return; 
-        }
-
         if (!dragTarget || !isDragging) return;
 
         const rect = renderer.domElement.getBoundingClientRect();
@@ -209,23 +202,11 @@
                 const localDiff = intersect.sub(dragTarget.getWorldPosition(new THREE.Vector3())).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const id = dragTarget.userData.id, data = currentEgg.userData.data;
                 
-                // 💡 1번 오류 해결: 왼클릭(0)은 무조건 일정비율 크기 조절
-                if (mouseButton === 0) {
-                    let ds = 0;
-                    if (id < 2) ds = (localDiff.y * (id === 0 ? 1 : -1) / BASE_H) * SENSITIVITY;
-                    else if (id < 4) ds = (localDiff.x * (id === 3 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
-                    else ds = (localDiff.z * (id === 4 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
-                    
-                    data.scale.setScalar(Math.max(0.1, startScale.y + ds)); // 모든 축 균일 적용
-                    
-                    const moveDir = id < 2 ? new THREE.Vector3(0, (id === 0 ? 1 : -1), 0) : 
-                                    (id < 4 ? new THREE.Vector3((id === 3 ? 1 : -1), 0, 0) : 
-                                              new THREE.Vector3(0, 0, (id === 4 ? 1 : -1)));
-                    const moveDist = id < 2 ? (data.scale.y - startScale.y) * BASE_H / 2 : (data.scale.x - startScale.x) * BASE_R;
-                    currentEgg.position.copy(startPos).add(moveDir.applyQuaternion(currentEgg.quaternion).multiplyScalar(moveDist));
-                } 
-                // 💡 2번 오류 해결: 오른클릭(2)은 해당 축만 개별 변형 (자유변형)
-                else if (mouseButton === 2) {
+                // 💡 변형 로직: Ctrl 여부와 마우스 버튼에 따른 분기
+                const useFreeForm = (mouseButton === 2 || (mouseButton === 0 && isCtrlPressed));
+
+                if (useFreeForm) {
+                    // 자유 변형 (한 방향만)
                     if (id < 2) { 
                         const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds);
                         currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion));
@@ -236,6 +217,19 @@
                         const dir = id === 4 ? 1 : -1; const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.z = Math.max(0.1, startScale.z + ds);
                         currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion));
                     }
+                } else {
+                    // 전체 비례 변형 (유지하고자 하는 신규 기능)
+                    let ds = 0;
+                    if (id < 2) ds = (localDiff.y * (id === 0 ? 1 : -1) / BASE_H) * SENSITIVITY;
+                    else if (id < 4) ds = (localDiff.x * (id === 3 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
+                    else ds = (localDiff.z * (id === 4 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
+                    
+                    data.scale.setScalar(Math.max(0.1, startScale.y + ds));
+                    const moveDir = id < 2 ? new THREE.Vector3(0, (id === 0 ? 1 : -1), 0) : 
+                                    (id < 4 ? new THREE.Vector3((id === 3 ? 1 : -1), 0, 0) : 
+                                              new THREE.Vector3(0, 0, (id === 4 ? 1 : -1)));
+                    const moveDist = id < 2 ? (data.scale.y - startScale.y) * BASE_H / 2 : (data.scale.x - startScale.x) * BASE_R;
+                    currentEgg.position.copy(startPos).add(moveDir.applyQuaternion(currentEgg.quaternion).multiplyScalar(moveDist));
                 }
                 updateMesh(currentEgg);
             }
@@ -260,19 +254,12 @@
 
     window.executeUndo = function() {
         if (history.length < 2) return; 
-        history.pop(); 
-        const state = JSON.parse(history[history.length - 1]);
-        scene.children.filter(o => o.userData.isEgg).forEach(e => {
-            scene.remove(e); if(e.geometry) e.geometry.dispose(); if(e.material) e.material.dispose();
-        });
+        history.pop(); const state = JSON.parse(history[history.length - 1]);
+        scene.children.filter(o => o.userData.isEgg).forEach(e => { scene.remove(e); if(e.geometry) e.geometry.dispose(); if(e.material) e.material.dispose(); });
         state.forEach(d => {
-            const e = createEgg(new THREE.Color(d.col)); 
-            e.position.set(d.pos.x, d.pos.y, d.pos.z);
+            const e = createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x, d.pos.y, d.pos.z);
             e.quaternion.set(d.rot._x, d.rot._y, d.rot._z, d.rot._w);
-            e.userData.data = { 
-                scale: new THREE.Vector3(d.scale.x, d.scale.y, d.scale.z), 
-                offsets: d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)) 
-            };
+            e.userData.data = { scale: new THREE.Vector3(d.scale.x, d.scale.y, d.scale.z), offsets: d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)) };
             updateMesh(e); scene.add(e);
         });
         currentEgg = null; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
