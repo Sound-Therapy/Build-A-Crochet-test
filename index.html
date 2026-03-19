@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.33.1 - Group Move Update</title>
+    <title>Build-A-Crochet v5.33.2 - Stable Group Move</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; box-sizing: border-box; }
@@ -10,18 +10,14 @@
         .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; }
         .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
         .undo-btn { background: #333; color: white; height: 40px; }
-        
         #size-info { width: 90%; margin-top: 20px; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; }
         .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
-        
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
-        
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); transition: transform 0.1s; }
         .color-dot:hover { transform: scale(1.15); }
-        
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
@@ -30,7 +26,6 @@
 <div id="panel">
     <div class="btn undo-btn" onclick="executeUndo()">UNDO</div>
     <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
-    
     <div id="size-info">
         <div class="info-label">SIZE (cm)</div>
         <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
@@ -40,15 +35,13 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.33.1</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.33.2</div>
     <div id="palette">
-        <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
-        <div class="color-dot" style="background: #000000;" onclick="updateColor('#000000')"></div>
-        <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
-        <div class="color-dot" style="background: #28a745;" onclick="updateColor('#28a745')"></div>
-        <div class="color-dot" style="background: #007bff;" onclick="updateColor('#007bff')"></div>
-        <div class="color-dot" style="background: #ffd43b;" onclick="updateColor('#ffd43b')"></div>
-        </div>
+        <script>
+            const cols = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
+            cols.forEach(c => document.write(`<div class="color-dot" style="background:${c};" onclick="updateColor('${c}')"></div>`));
+        </script>
+    </div>
     <div id="select-box"></div>
 </div>
 
@@ -66,8 +59,7 @@
     let selectBoxEl = document.getElementById('select-box');
     let history = [], currentSelection = [];
     
-    const CM_RATIO = 0.5;
-    const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
+    const BASE_H = 20, BASE_R = 7, H_OFFSET = 7, CM_RATIO = 0.5;
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
@@ -93,7 +85,6 @@
         captureState(); animate();
     }
 
-    // --- Core logic unchanged from v5.33.0 for Mesh/Size ---
     function createEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
@@ -133,7 +124,34 @@
         wSpan.innerText = (size.x * CM_RATIO).toFixed(1); hSpan.innerText = (size.y * CM_RATIO).toFixed(1); dSpan.innerText = (size.z * CM_RATIO).toFixed(1);
     }
 
-    // --- Interaction Update for Group Move ---
+    function createHandles() {
+        const makeH = (id) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
+            m.renderOrder = 999; m.visible = false; m.userData = { isHandle: true, id }; scene.add(m); return m;
+        };
+        handles = [0,1,2,3,4,5].map(id => makeH(id));
+        const makeR = (col, axis) => {
+            const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.3, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthTest: false }));
+            r.renderOrder = 998; r.visible = false; r.userData = { isRotationHandle: true, axis }; scene.add(r); return r;
+        };
+        rotX_H = makeR(0xff0000, 'x'); rotY_H = makeR(0x00ff00, 'y'); rotZ_H = makeR(0x0000ff, 'z');
+    }
+
+    function createGroupGizmo() {
+        groupGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)), 0xff69b4);
+        groupGizmo.visible = false; scene.add(groupGizmo);
+        const makeG = (id) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff69b4, depthTest: false }));
+            m.renderOrder = 999; m.visible = false; m.userData = { isGroupHandle: true, id }; scene.add(m); return m;
+        };
+        groupHandles = [0,1,2,3,4,5,6,7].map(id => makeG(id));
+        const makeGR = (col, axis) => {
+            const r = new THREE.Mesh(new THREE.TorusGeometry(28, 0.5, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, depthTest: false }));
+            r.renderOrder = 998; r.visible = false; r.userData = { isGroupRotationHandle: true, axis }; scene.add(r); return r;
+        };
+        groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
+    }
+
     function onDown(e) {
         if (e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
@@ -150,26 +168,43 @@
             dragTarget = gizmoHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             raycaster.ray.intersectPlane(plane, startIntersect);
-            // ... (Handle start logic remains same)
+            if (currentEgg) {
+                startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone(); startScale = currentEgg.userData.data.scale.clone();
+                if (dragTarget.userData.isHandle) {
+                    const id = dragTarget.userData.id, oppId = (id % 2 === 0) ? id + 1 : id - 1;
+                    const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
+                    worldAnchorPos.copy(ctrls[oppId]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
+                    startHandleDist = startIntersect.distanceTo(worldAnchorPos);
+                    dragTarget.userData.startOffset = currentEgg.userData.data.offsets[id].clone();
+                } else { startHandleDist = startIntersect.distanceTo(currentEgg.position); }
+                lastMouseAngle = getMouseAngle(e, currentEgg);
+            } else if (currentSelection.length > 1) {
+                const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
+                const groupCenter = box.getCenter(new THREE.Vector3());
+                startGroupData = currentSelection.map(e => ({ pos: e.position.clone(), scale: e.userData.data.scale.clone(), rot: e.quaternion.clone() }));
+                startHandleDist = startIntersect.distanceTo(groupCenter);
+                lastMouseAngle = getMouseAngle(e, { position: groupCenter });
+            }
             return;
         }
 
         const eggHits = raycaster.intersectObjects(scene.children.filter(o => o.userData.isEgg));
         if (eggHits.length > 0) {
             const hitEgg = eggHits[0].object;
-            
-            // ⭐ 핵심: 그룹 상태에서 그룹 내 물체를 왼클릭하면 그룹 전체 이동 모드
+            // ⭐ 그룹 일괄 이동 로직: 이미 그룹에 포함된 물체를 왼클릭 시
             if (e.button === 0 && currentSelection.length > 1 && currentSelection.includes(hitEgg)) {
                 dragTarget = hitEgg; isDragging = true; mouseButton = 0; controls.enabled = false;
                 const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -hitEgg.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
                 raycaster.ray.intersectPlane(plane, startIntersect);
-                startGroupData = currentSelection.map(e => ({ offset: e.position.clone().sub(startIntersect) }));
+                startGroupData = currentSelection.map(egg => ({ offset: egg.position.clone().sub(startIntersect) }));
                 return;
             }
-
-            // 개별 선택 (왼클릭) 또는 단일 선택
+            // 개별 선택 (단순 클릭)
             dragTarget = hitEgg; isDragging = true; mouseButton = e.button; controls.enabled = false;
-            if (e.button === 0) updateSelectionVisuals([dragTarget]);
+            if (e.button === 0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
+            else if (e.button === 0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
+            else if (e.button === 2) updateSelectionVisuals([dragTarget]); // 우클릭 단일 선택
+            
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             raycaster.ray.intersectPlane(plane, startIntersect);
         } else {
@@ -194,23 +229,69 @@
         const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
         if (raycaster.ray.intersectPlane(plane, intersect)) {
-            // ⭐ 그룹 전체 이동 로직
+            // ⭐ 그룹 전체 이동 실행
             if (currentSelection.length > 1 && currentSelection.includes(dragTarget) && mouseButton === 0 && !dragTarget.userData.isHandle) {
                 currentSelection.forEach((egg, i) => egg.position.copy(intersect).add(startGroupData[i].offset));
                 updateGroupGizmoVisuals();
-            } 
-            else if (dragTarget.userData.isEgg) { dragTarget.position.copy(intersect); }
-            // ... (Other gizmo move logic remains same)
+            } else if (currentEgg) {
+                if (dragTarget.userData.isRotationHandle) {
+                    const currentAngle = getMouseAngle(e, currentEgg), deltaAngle = currentAngle - lastMouseAngle;
+                    const axis = dragTarget.userData.axis === 'x' ? new THREE.Vector3(1,0,0) : dragTarget.userData.axis === 'y' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+                    currentEgg.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle)); lastMouseAngle = currentAngle;
+                } else if (dragTarget.userData.isEgg) { dragTarget.position.copy(intersect); }
+                else if (dragTarget.userData.isHandle) {
+                    const id = dragTarget.userData.id, data = currentEgg.userData.data;
+                    if (mouseButton === 0 && e.ctrlKey) {
+                        const localDelta = intersect.clone().sub(startIntersect).applyQuaternion(currentEgg.quaternion.clone().invert());
+                        data.offsets[id].copy(dragTarget.userData.startOffset).add(localDelta); updateMesh(currentEgg);
+                    } else {
+                        const ratio = Math.max(0.01, intersect.distanceTo(worldAnchorPos) / startHandleDist);
+                        if (mouseButton === 0) { data.scale.copy(startScale).multiplyScalar(ratio); } 
+                        else if (mouseButton === 2) { 
+                            const dir = (id < 2) ? 'y' : (id < 4 ? 'x' : 'z'); data.scale.copy(startScale); data.scale[dir] *= ratio;
+                            const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)], oppId = (id % 2 === 0) ? id + 1 : id - 1;
+                            const currentOppPos = ctrls[oppId].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                            currentEgg.position.add(worldAnchorPos.clone().sub(currentOppPos));
+                        }
+                        updateMesh(currentEgg);
+                    }
+                }
+            } else if (currentSelection.length > 1) { // 기즈모를 이용한 그룹 변형
+                const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
+                const groupCenter = box.getCenter(new THREE.Vector3());
+                if (dragTarget.userData.isGroupHandle) {
+                    const ratio = Math.max(0.01, intersect.distanceTo(groupCenter) / startHandleDist);
+                    currentSelection.forEach((e, i) => { e.userData.data.scale.copy(startGroupData[i].scale).multiplyScalar(ratio); updateMesh(e); e.position.copy(groupCenter).add(startGroupData[i].pos.clone().sub(groupCenter).multiplyScalar(ratio)); });
+                } else if (dragTarget.userData.isGroupRotationHandle) {
+                    const deltaAngle = getMouseAngle(e, { position: groupCenter }) - lastMouseAngle;
+                    const axis = dragTarget.userData.axis === 'x' ? new THREE.Vector3(1,0,0) : dragTarget.userData.axis === 'y' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+                    const rotQ = new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle);
+                    currentSelection.forEach(egg => { egg.position.sub(groupCenter).applyQuaternion(rotQ).add(groupCenter); egg.quaternion.premultiply(rotQ); });
+                    lastMouseAngle += deltaAngle;
+                }
+                updateGroupGizmoVisuals();
+            }
             updateRealTimeSize();
         }
     }
 
-    // --- UI/Helper Setup (v5.33.0 continuation) ---
-    function createHandles() { /* same as v5.33.0 */ }
-    function createGroupGizmo() { /* same as v5.33.0 */ }
-    function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
-    function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
-    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10.01; scene.add(egg); captureState(); updateSelectionVisuals([egg]); isPlacementMode = false; ghostEgg.visible = false; }
+    function onUp(e) { 
+        if (isBoxSelecting) {
+            isBoxSelecting = false; selectBoxEl.style.display = 'none';
+            const rect = renderer.domElement.getBoundingClientRect();
+            const minX = Math.min(boxStart.x, e.clientX), minY = Math.min(boxStart.y, e.clientY), maxX = Math.max(boxStart.x, e.clientX), maxY = Math.max(boxStart.y, e.clientY);
+            if(Math.abs(maxX-minX) > 5) {
+                const selected = scene.children.filter(o => o.userData.isEgg).filter(egg => {
+                    const sp = egg.position.clone().project(camera);
+                    const x = (sp.x + 1) * rect.width / 2 + rect.left, y = (1 - sp.y) * rect.height / 2 + rect.top;
+                    return (x >= minX && x <= maxX && y >= minY && y <= maxY);
+                });
+                updateSelectionVisuals(selected);
+            }
+        }
+        if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; 
+    }
+
     function updateSelectionVisuals(selected) {
         currentSelection = selected; updateRealTimeSize();
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
@@ -220,6 +301,7 @@
         if (selected.length === 1) { currentEgg = selected[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true); }
         else { currentEgg = null; groupGizmo.visible = true; [...groupHandles, ...groupRotHandles].forEach(h => h.visible = true); updateGroupGizmoVisuals(); }
     }
+
     function updateGroupGizmoVisuals() {
         if (currentSelection.length < 2) return;
         const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
@@ -229,8 +311,27 @@
         groupHandles.forEach((h, i) => h.position.copy(center).add(corners[i].clone().multiply(size)));
         groupRotHandles.forEach((r, i) => { r.position.copy(center); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2); });
     }
-    function onUp() { if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; isBoxSelecting = false; selectBoxEl.style.display = 'none'; }
-    function captureState() { /* same as v5.33.0 */ }
+
+    function getMouseAngle(e, targetObj) {
+        const rect = renderer.domElement.getBoundingClientRect(); const sPos = targetObj.position.clone().project(camera);
+        return Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+    }
+
+    function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
+    function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
+    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10.01; scene.add(egg); captureState(); updateSelectionVisuals([egg]); isPlacementMode = false; ghostEgg.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
+    
+    function captureState() {
+        const state = scene.children.filter(o => o.userData.isEgg).map(e => ({ pos: e.position.clone(), rot: e.quaternion.clone(), scale: e.userData.data.scale.clone(), offsets: e.userData.data.offsets.map(o => o.clone()), col: e.material.color.getHex() }));
+        history.push(JSON.stringify(state)); if (history.length > 50) history.shift();
+    }
+    window.executeUndo = function() {
+        if (history.length < 2) return; history.pop(); const state = JSON.parse(history[history.length - 1]);
+        scene.children.filter(o => o.userData.isEgg).forEach(e => { e.geometry.dispose(); e.material.dispose(); scene.remove(e); });
+        state.forEach(d => { const e = createEgg(new THREE.Color(d.col)); e.position.copy(d.pos); e.quaternion.copy(d.rot); e.userData.data.scale.copy(d.scale); e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)); updateMesh(e); scene.add(e); });
+        updateSelectionVisuals([]);
+    };
+
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg) {
