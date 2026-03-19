@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.26.6 - Right Click Fix</title>
+    <title>Build-A-Crochet v5.26.7 - Logic Restoration</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -14,8 +14,6 @@
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: 1fr; gap: 8px; border: 1px solid #ccc; z-index: 200; }
         .color-dot { width: 30px; height: 30px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); }
-        
-        /* 💡 사각형 점선 박스 스타일 */
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
@@ -27,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.26.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.26.7 (Stable Restore)</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -45,7 +43,6 @@
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let startScale, startPos, startRotation, mouseButton, startOffset, startMouseAngle;
 
-    // 💡 박스 선택 변수
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
 
@@ -68,7 +65,6 @@
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
 
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        // 💡 오른클릭(RIGHT)의 화면 전환 기능을 완전히 삭제 (null)
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
 
         createHandles();
@@ -82,7 +78,6 @@
         animate();
     }
 
-    // --- v5.25.2 Core Functions (Egg, Mesh, Handles) ---
     function createEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
@@ -146,23 +141,16 @@
 
         const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)]);
         
-        // 💡 오른클릭(2) 시: 점 클릭 여부에 따라 동작 결정
         if (e.button === 2) {
             if (hits.length === 0) {
-                // 그리드 드래그 -> 사각형 그리기 시작
                 isBoxSelecting = true;
                 boxStart.set(e.clientX, e.clientY);
                 selectBoxEl.style.display = 'block';
                 selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
                 return;
-            } else if (hits[0].object.userData.isHandle) {
-                // 점 클릭 -> 자유변형 시작 (아래 dragging 로직으로 진행)
-            } else {
-                return; // 에그 몸체 오른클릭은 아무것도 안 함
             }
         }
 
-        // 💡 조작 로직 (왼클릭 혹은 오른클릭 점 조작)
         if (hits.length > 0) {
             dragTarget = hits[0].object; controls.enabled = false; isDragging = true; mouseButton = e.button;
             if (dragTarget.userData.isEgg) {
@@ -170,7 +158,8 @@
                 [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
                 document.getElementById('palette').style.display = 'grid';
             }
-            startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone(); startScale = currentEgg.userData.data.scale.clone();
+            startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone(); 
+            startScale = currentEgg.userData.data.scale.clone();
             const camNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
             const plane = new THREE.Plane(camNormal, -dragTarget.getWorldPosition(new THREE.Vector3()).dot(camNormal));
             let intersect = new THREE.Vector3();
@@ -220,13 +209,20 @@
                 const localDiff = intersect.sub(dragTarget.getWorldPosition(new THREE.Vector3())).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const id = dragTarget.userData.id, data = currentEgg.userData.data;
                 
-                if (mouseButton === 0) { // 왼클릭: 비례변형 (v5.25.2)
-                    if (id < 2) { 
-                        const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; 
-                        data.scale.setScalar(Math.max(0.1, startScale.y + ds));
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion));
-                    }
-                } else if (mouseButton === 2) { // 오른클릭: 자유변형 (v5.25.2)
+                if (mouseButton === 0) { // 1 & 2번 오류 수정: 왼클릭 시 모든 축 비례 변형
+                    let ds = 0;
+                    if (id < 2) ds = (localDiff.y * (id === 0 ? 1 : -1) / BASE_H) * SENSITIVITY;
+                    else if (id < 4) ds = (localDiff.x * (id === 3 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
+                    else ds = (localDiff.z * (id === 4 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
+                    
+                    data.scale.setScalar(Math.max(0.1, startScale.y + ds));
+                    // 축 이동 보정
+                    const moveDir = id < 2 ? new THREE.Vector3(0, (id === 0 ? 1 : -1), 0) : 
+                                    (id < 4 ? new THREE.Vector3((id === 3 ? 1 : -1), 0, 0) : 
+                                              new THREE.Vector3(0, 0, (id === 4 ? 1 : -1)));
+                    const moveDist = id < 2 ? (data.scale.y - startScale.y) * BASE_H / 2 : (data.scale.x - startScale.x) * BASE_R;
+                    currentEgg.position.copy(startPos).add(moveDir.applyQuaternion(currentEgg.quaternion).multiplyScalar(moveDist));
+                } else if (mouseButton === 2) { // 2번 오류 수정: 우클릭 시 자유 변형
                     if (id < 2) { 
                         const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds);
                         currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion));
@@ -251,7 +247,7 @@
 
     function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
 
-    function captureState() {
+    function captureState() { // 3번 오류 수정: UNDO 시 객체 유지를 위한 상태 저장 로직 복구
         const state = scene.children.filter(o => o.userData.isEgg).map(e => ({
             pos: e.position.clone(), rot: e.quaternion.clone(),
             scale: e.userData.data.scale.clone(), offsets: e.userData.data.offsets.map(o => o.clone()), col: e.material.color.getHex()
@@ -260,13 +256,26 @@
     }
 
     window.executeUndo = function() {
-        if (history.length < 2) return; history.pop(); const state = JSON.parse(history[history.length - 1]);
-        scene.children.filter(o => o.userData.isEgg).forEach(e => { scene.remove(e); e.geometry.dispose(); e.material.dispose(); });
+        if (history.length < 2) return; 
+        history.pop(); 
+        const state = JSON.parse(history[history.length - 1]);
+        
+        // 에그 전부 삭제 후 복구
+        scene.children.filter(o => o.userData.isEgg).forEach(e => {
+            scene.remove(e); if(e.geometry) e.geometry.dispose(); if(e.material) e.material.dispose();
+        });
+
         state.forEach(d => {
-            const e = createEgg(new THREE.Color(d.col)); e.position.copy(d.pos); e.quaternion.copy(d.rot);
-            e.userData.data = { scale: new THREE.Vector3(d.scale.x, d.scale.y, d.scale.z), offsets: d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)) };
+            const e = createEgg(new THREE.Color(d.col)); 
+            e.position.set(d.pos.x, d.pos.y, d.pos.z);
+            e.quaternion.set(d.rot._x, d.rot._y, d.rot._z, d.rot._w);
+            e.userData.data = { 
+                scale: new THREE.Vector3(d.scale.x, d.scale.y, d.scale.z), 
+                offsets: d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)) 
+            };
             updateMesh(e); scene.add(e);
         });
+        currentEgg = null; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
     };
 
     function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
