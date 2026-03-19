@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.29.1 - Precision Controls</title>
+    <title>Build-A-Crochet v5.29.2 - Final Control Sync</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.29.1</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.29.2</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -42,10 +42,10 @@
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let startScale, startPos, startRotation, mouseButton;
-    let isBoxSelecting = false, boxStart = new THREE.Vector2(), currentSelection = [];
+    let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
+    let history = [], currentSelection = [];
     
-    let history = [];
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
     const SENSITIVITY = 0.7;
@@ -64,7 +64,6 @@
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        // ⭐ 그리드 좌클릭은 View 전환, 우클릭은 Orbit에서 제외하여 박스 선택에 할당
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
         
         createHandles(); createGhost();
@@ -104,8 +103,7 @@
                 const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); tw += w;
                 sOff.add(offsets[j].clone().multiplyScalar(w));
             }
-            const fV = sV.add(sOff.divideScalar(tw));
-            pos.setXYZ(i, fV.x, fV.y, fV.z);
+            pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
         egg.userData.outline.geometry.attributes.position.copy(pos).needsUpdate = true;
@@ -125,17 +123,17 @@
         rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
     }
 
-    function updateSelectionVisuals(selectedEggs) {
+    function updateSelectionVisuals(selected) {
         scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
-        currentSelection = selectedEggs;
-        if (selectedEggs.length === 0) { deselectAllHandles(); return; }
-        selectedEggs.forEach(e => e.userData.outline.scale.set(1.08, 1.08, 1.08));
-        currentEgg = selectedEggs[0];
+        currentSelection = selected;
+        if (selected.length === 0) { deselectAll(); return; }
+        selected.forEach(e => e.userData.outline.scale.set(1.1, 1.1, 1.1));
+        currentEgg = selected[0];
         [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
         document.getElementById('palette').style.display = 'grid';
     }
 
-    function deselectAllHandles() {
+    function deselectAll() {
         currentEgg = null; currentSelection = [];
         [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
         document.getElementById('palette').style.display = 'none';
@@ -148,34 +146,27 @@
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
-        if (isPlacementMode && e.button === 0) {
-            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) spawnEgg(intersect); return;
-        }
-
         const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)]);
         
         if (hits.length > 0) {
+            // 배치 모드여도 이미 있는 객체를 클릭하면 변형 모드 우선
             dragTarget = hits[0].object; isDragging = true; mouseButton = e.button;
-            controls.enabled = false; // 에그/핸들 조작 시 뷰 전환 중단
+            controls.enabled = false;
             if(dragTarget.userData.isEgg) {
                 if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
-                else if (e.ctrlKey && e.button === 0 && !currentSelection.includes(dragTarget)) {
-                    currentSelection.push(dragTarget); updateSelectionVisuals(currentSelection);
-                }
+                else if (!currentSelection.includes(dragTarget)) { currentSelection.push(dragTarget); updateSelectionVisuals(currentSelection); }
             }
             startRotation = currentEgg ? currentEgg.quaternion.clone() : null;
             startPos = currentEgg ? currentEgg.position.clone() : null;
-            if(dragTarget.userData.isHandle) { startScale = currentEgg.userData.data.scale.clone(); }
+            if(dragTarget.userData.isHandle) startScale = currentEgg.userData.data.scale.clone();
             const sPos = dragTarget.position.clone().project(camera);
             startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
         } else {
-            // ⭐ 빈 공간 클릭 시 분기
-            if (e.button === 0) {
-                // 좌클릭: 뷰 전환 허용 및 핸들 숨기기
-                controls.enabled = true;
-                deselectAllHandles();
+            if (isPlacementMode && e.button === 0) {
+                let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) spawnEgg(intersect);
+            } else if (e.button === 0) {
+                controls.enabled = true; deselectAll();
             } else if (e.button === 2) {
-                // 우클릭: 사각형 활성화 (박스 선택)
                 isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
                 selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
                 controls.enabled = false;
@@ -184,15 +175,23 @@
     }
 
     function onMove(e) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+
+        if (isPlacementMode) {
+            let intersect = new THREE.Vector3(); 
+            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { 
+                ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; 
+            }
+            return;
+        }
         if (isBoxSelecting) {
             const x = Math.min(boxStart.x, e.clientX), y = Math.min(boxStart.y, e.clientY);
             const w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
             selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
         }
         if (!dragTarget || !currentEgg) return;
-        const rect = renderer.domElement.getBoundingClientRect();
-        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
         if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
             const sPos = dragTarget.position.clone().project(camera);
@@ -203,7 +202,7 @@
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) {
                 if(!e.ctrlKey || mouseButton !== 0) { const diff = intersect.sub(currentEgg.position); currentSelection.forEach(e => e.position.add(diff)); }
-                else { currentEgg.position.copy(intersect); }
+                else currentEgg.position.copy(intersect);
             }
         } else if (dragTarget.userData.isHandle) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
@@ -211,19 +210,16 @@
             if (raycaster.ray.intersectPlane(plane, intersect)) {
                 const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const data = currentEgg.userData.data, id = dragTarget.userData.id;
-                
-                if (mouseButton === 0 && !e.ctrlKey) { // 좌클릭: 전체 비례
+                if (mouseButton === 0 && !e.ctrlKey) {
                     const dir = (id === 0 || id === 3 || id === 4) ? 1 : -1;
                     const ds = (id < 2 ? localDiff.y : (id < 4 ? localDiff.x : localDiff.z)) * dir / (id < 2 ? BASE_H : BASE_R * 2) * SENSITIVITY;
                     data.scale.addScalar(ds); data.scale.x = Math.max(0.1, data.scale.x); data.scale.y = Math.max(0.1, data.scale.y); data.scale.z = Math.max(0.1, data.scale.z);
                     currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0)), 0).applyQuaternion(currentEgg.quaternion));
-                } else if (mouseButton === 2) { // 우클릭: 한 방향
+                } else if (mouseButton === 2) {
                     if (id < 2) { const dir = id === 0 ? 1 : -1; data.scale.y = Math.max(0.1, startScale.y + (localDiff.y * dir / BASE_H) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
                     else if (id < 4) { const dir = id === 3 ? 1 : -1; data.scale.x = Math.max(0.1, startScale.x + (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
                     else { const dir = id === 4 ? 1 : -1; data.scale.z = Math.max(0.1, startScale.z + (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
-                } else if (mouseButton === 0 && e.ctrlKey) { // Ctrl+좌: 자유 변형
-                    data.offsets[id].add(localDiff);
-                }
+                } else if (mouseButton === 0 && e.ctrlKey) { data.offsets[id].add(localDiff); }
                 updateMesh(currentEgg);
             }
         }
@@ -236,11 +232,9 @@
             const minX = Math.min(boxStart.x, e.clientX), minY = Math.min(boxStart.y, e.clientY);
             const maxX = Math.max(boxStart.x, e.clientX), maxY = Math.max(boxStart.y, e.clientY);
             if(Math.abs(maxX-minX) > 5) {
-                const eggs = scene.children.filter(o => o.userData.isEgg);
-                const selected = eggs.filter(egg => {
-                    const screenPos = egg.position.clone().project(camera);
-                    const x = (screenPos.x + 1) * rect.width / 2 + rect.left;
-                    const y = (1 - screenPos.y) * rect.height / 2 + rect.top;
+                const selected = scene.children.filter(o => o.userData.isEgg).filter(egg => {
+                    const sp = egg.position.clone().project(camera);
+                    const x = (sp.x + 1) * rect.width / 2 + rect.left, y = (1 - sp.y) * rect.height / 2 + rect.top;
                     return (x >= minX && x <= maxX && y >= minY && y <= maxY);
                 });
                 updateSelectionVisuals(selected);
@@ -251,18 +245,17 @@
 
     function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
     function captureState() {
-        const eggs = scene.children.filter(o => o.userData.isEgg);
-        const state = eggs.map(e => ({ pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w}, scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex() }));
+        const state = scene.children.filter(o => o.userData.isEgg).map(e => ({ pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w}, scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex() }));
         history.push(JSON.stringify(state)); if (history.length > 50) history.shift();
     }
     window.executeUndo = function() {
         if (history.length < 2) return; history.pop(); const state = JSON.parse(history[history.length - 1]);
         scene.children.filter(o => o.userData.isEgg).forEach(e => { e.geometry.dispose(); e.material.dispose(); scene.remove(e); });
         state.forEach(d => { const e = createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x, d.pos.y, d.pos.z); e.quaternion.set(d.rot.x, d.rot.y, d.rot.z, d.rot.w); e.userData.data.scale.set(d.scale.x, d.scale.y, d.scale.z); e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z)); updateMesh(e); scene.add(e); });
-        deselectAllHandles();
+        deselectAll();
     };
     function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
-    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); updateSelectionVisuals([egg]); togglePlacementMode(); }
+    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); updateSelectionVisuals([egg]); isPlacementMode = false; ghostEgg.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg) {
