@@ -2,19 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.23.0 - Hybrid Sculptor</title>
+    <title>Build-A-Crochet v5.25.0 - Anchored Sculptor</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
         .btn { width: 50px; height: 50px; cursor: pointer; border: 2px solid #fff; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 8px; background: #eee; user-select: none; }
-        .egg-btn { background: #ff69b4; border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%; }
-        .egg-btn.active { background: #28a745; box-shadow: 0 0 20px rgba(40,167,69,0.8); }
+        .egg-btn { background: #ff69b4; border-radius: 50%; width: 40px; height: 50px; }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
         .undo-btn { background: #333; color: white; }
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
-        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 12px; border-radius: 15px; display: none; grid-template-columns: repeat(2, 1fr); gap: 8px; border: 1px solid #ccc; z-index: 300; max-height: 80vh; overflow-y: auto; }
-        .color-dot { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; border: 2px solid rgba(0,0,0,0.1); transition: transform 0.1s; }
-        .color-dot:hover { transform: scale(1.1); border-color: #555; }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: repeat(2, 1fr); gap: 5px; border: 1px solid #ccc; }
+        .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
@@ -22,11 +21,11 @@
 <div id="panel">
     <div class="btn undo-btn" onclick="executeUndo()">UNDO</div>
     <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
-    <div style="font-size: 9px; color: #333; text-align: center;">ADD EGG</div>
+    <div style="font-size: 9px; margin-top: -10px;">ADD EGG</div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.23.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.25.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -40,359 +39,186 @@
 <script>
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
-    let rotX_H, rotY_H, rotZ_H;
-    // 💡 통합된 6개의 하이브리드 핸들 (상/하/좌/우/앞/뒤)
-    let hybridHandles = []; 
+    let rotX_H, rotY_H, rotZ_H, handles = [];
+    let startScale, startPos, startRotation, mouseButton;
     
     let history = [];
-    const MAX_HISTORY = 50;
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const BASE_H = 20, BASE_R = 7;
-    // 💡 핸들을 물체에서 띄울 거리 (가시성)
-    const HANDLE_OFFSET = 7; 
+    const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
         camera.position.set(60, 50, 80);
-        
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
-        const container = document.getElementById('canvas-container');
-        container.appendChild(renderer.domElement);
-        
-        // 💡 우클릭 메뉴 차단 (우클릭 조작용)
-        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault(), false);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
-        scene.add(new THREE.AmbientLight(0xffffff, 1.5));
-        
+        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
+
         controls = new THREE.OrbitControls(camera, renderer.domElement);
-        // 우클릭은 스컬프팅에 써야하므로, 컨트롤즈의 팬 기능을 좌클릭+Shift 등으로 분리 권장 (우선 팬 차단)
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
 
         createHandles();
         createGhost();
-
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        
         animate();
     }
 
-    // 하이브리드(Scale+FFD)가 가능한 에그 메쉬 생성 (v5.22.0 기반)
-    function createHybridEgg(color, isGhost = false) {
+    function createEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
-            const t = i / 20; const y = t * BASE_H;
-            const r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+            const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
-        
-        // 중요: 변형을 위해 원본 정점 위치 보관
-        geo.userData.origPos = geo.attributes.position.clone(); 
-        
-        const mat = new THREE.MeshPhongMaterial({ color: color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.8, depthWrite: !isGhost });
+        geo.userData.origPos = geo.attributes.position.clone();
+        const mat = new THREE.MeshPhongMaterial({ color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.8 });
         const egg = new THREE.Mesh(geo, mat);
-        
         if (!isGhost) {
             egg.userData.isEgg = true;
-            // 💡 하이브리드 데이터 초기화 (전체 Scale + 6개의 FFD 오프셋)
-            // 주의: FFD 오프셋은 6개의 면(상/하/좌/우/앞/뒤) 기준으로 저장
-            egg.userData.scOffs = {
-                scale: new THREE.Vector3(1, 1, 1), // 기본 Scale
-                offsets: [
-                    new THREE.Vector3(), new THREE.Vector3(), // Top, Bottom
-                    new THREE.Vector3(), new THREE.Vector3(), // Left, Right
-                    new THREE.Vector3(), new THREE.Vector3()  // Front, Back
-                ]
-            };
+            // 💡 v5.25.0 핵심 데이터: Scale(전체) + Offsets(국소 변형)
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: Array.from({length: 6}, () => new THREE.Vector3()) };
             const outline = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.BackSide }));
             outline.scale.set(1.02, 1.02, 1.02); egg.add(outline);
-            egg.userData.outline = outline; 
+            egg.userData.outline = outline;
         }
         return egg;
     }
 
-    function createGhost() {
-        ghostEgg = createHybridEgg(0x28a745, true); 
-        ghostEgg.visible = false; ghostEgg.renderOrder = 1000;
-        scene.add(ghostEgg);
-    }
+    function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
 
-    // 하이브리드 데이터까지 포함하여 상태 저장
-    function captureState() {
-        const eggs = scene.children.filter(o => o.userData.isEgg);
-        const state = eggs.map(egg => ({
-            pos: egg.position.clone(),
-            rot: egg.quaternion.clone(),
-            // 💡 전체 Scale 및 FFD 오프셋 저장
-            scOffs: {
-                scale: egg.userData.scOffs.scale.clone(),
-                offsets: egg.userData.scOffs.offsets.map(v => v.clone())
-            },
-            col: egg.material.color.getHex()
-        }));
-        const json = JSON.stringify(state);
-        if (history.length > 0 && history[history.length - 1] === json) return;
-        history.push(json);
-        if (history.length > MAX_HISTORY) history.shift();
-    }
-
-    window.executeUndo = function() {
-        if (history.length <= 1) {
-            if (history.length === 1) applyState(JSON.parse(history[0]));
-            return;
-        }
-        history.pop(); applyState(JSON.parse(history[history.length - 1]));
-    };
-
-    function applyState(stateData) {
-        scene.children.filter(o => o.userData.isEgg).forEach(o => { o.geometry.dispose(); o.material.dispose(); scene.remove(o); });
-        stateData.forEach(d => {
-            const egg = createHybridEgg(new THREE.Color(d.col));
-            egg.position.copy(d.pos); egg.quaternion.copy(d.rot);
-            // 💡 하이브리드 데이터 복구 및 메쉬 갱신
-            egg.userData.scOffs = {
-                scale: new THREE.Vector3(d.scOffs.scale.x, d.scOffs.scale.y, d.scOffs.scale.z),
-                offsets: d.scOffs.offsets.map(v => new THREE.Vector3(v.x, v.y, v.z))
-            };
-            updateHybridMesh(egg); 
-            scene.add(egg);
-        });
-        deselectAll();
-    }
-
-    window.togglePlacementMode = function() {
-        isPlacementMode = !isPlacementMode;
-        document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode);
-        ghostEgg.visible = isPlacementMode;
-    }
-
-    function spawnEgg(pos) {
-        const egg = createHybridEgg(0xff69b4);
-        egg.position.copy(pos); egg.position.y += 10;
-        scene.add(egg);
-        captureState(); selectEgg(egg); togglePlacementMode();
-    }
-
-    // 💡 통합된 하이브리드 핸들 및 회전 링 생성
     function createHandles() {
-        const makeH = (col, id, axis) => { 
-            // 💡 크기 조절/스컬프팅 통합 핸들: 구체, 투톤 암시 (파랑/노랑)
-            const m = new THREE.Mesh(new THREE.SphereGeometry(2.2, 16, 16), new THREE.MeshBasicMaterial({ color: col, depthTest: false })); 
-            m.renderOrder = 999; m.visible = false; m.userData.isHybridHandle = true; m.userData.handleId = id; // 핸들 ID 부여
-            m.userData.axis = axis; // 주축 (Scale용)
-            scene.add(m); return m; 
+        const makeH = (id, axis) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
+            m.renderOrder = 999; m.visible = false; m.userData = { isHandle: true, id, axis };
+            scene.add(m); return m;
         };
-        // 💡 6개의 하이브리드 핸들 (상/하/좌/우/앞/뒤)
-        hybridHandles = [
-            makeH(0x007bff, 0, 'y'), makeH(0x00d4ff, 1, 'y'), // Top (Y+), Bottom (Y-)
-            makeH(0xffff00, 2, 'x'), makeH(0xffa500, 3, 'x'), // Left (X-), Right (X+)
-            makeH(0xff00ff, 4, 'z'), makeH(0x00ffff, 5, 'z')  // Front (Z+), Back (Z-)
+        handles = [
+            makeH(0, 'y'), makeH(1, 'y'), // Top(0), Bottom(1)
+            makeH(2, 'x'), makeH(3, 'x'), // Left(2), Right(3)
+            makeH(4, 'z'), makeH(5, 'z')  // Front(4), Back(5)
         ];
-        
-        const createRing = (color) => {
-            const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.4, 16, 64), new THREE.MeshBasicMaterial({ color: color, transparent: true, opacity: 0.5, depthTest: false }));
+        const makeR = (col) => {
+            const r = new THREE.Mesh(new THREE.TorusGeometry(20, 0.3, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthTest: false }));
             r.renderOrder = 998; r.visible = false; scene.add(r); return r;
         };
-        rotX_H = createRing(0xff0000); rotY_H = createRing(0x00ff00); rotZ_H = createRing(0x0000ff);
+        rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
     }
 
-    function selectEgg(egg) { 
-        currentEgg = egg; 
-        [rotX_H, rotY_H, rotZ_H, ...hybridHandles].forEach(h => h.visible = true); 
-        document.getElementById('palette').style.display = 'grid'; 
-    }
-    
-    function deselectAll() { 
-        currentEgg = null; 
-        [rotX_H, rotY_H, rotZ_H, ...hybridHandles].forEach(h => { if(h) h.visible = false; }); 
-        document.getElementById('palette').style.display = 'none'; 
-    }
-
+    function selectEgg(egg) { currentEgg = egg; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true); document.getElementById('palette').style.display = 'grid'; }
+    function deselectAll() { currentEgg = null; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false); document.getElementById('palette').style.display = 'none'; }
     window.updateColor = function(c) { if(currentEgg) { currentEgg.material.color.set(c); captureState(); } }
 
     function onDown(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-
         if (isPlacementMode && e.button === 0) {
-            let intersect = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { spawnEgg(intersect); return; }
+            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) spawnEgg(intersect); return;
         }
-
-        const interactables = [rotX_H, rotY_H, rotZ_H, ...hybridHandles];
-        const eggs = scene.children.filter(o => o.userData.isEgg);
-        const hits = raycaster.intersectObjects([...interactables, ...eggs]);
-        
+        const targets = [...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)];
+        const hits = raycaster.intersectObjects(targets);
         if (hits.length > 0) {
-            const obj = hits[0].object;
-            // 💡 드래그 대상 설정
-            if (interactables.includes(obj) || obj.userData.isEgg) {
-                dragTarget = obj; controls.enabled = false; isDragging = true;
-                if(obj.userData.isEgg) selectEgg(obj);
-                
-                startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
-                // 💡 하이브리드 핸들 클릭 시 버튼 종류 기록
-                if(obj.userData.isHybridHandle) {
-                    mouseButton = e.button; // 0: 좌클릭 (Scale), 2: 우클릭 (Sculpt)
-                    // Scale 시작 데이터 보관
-                    startScale = currentEgg.userData.scOffs.scale.clone();
-                }
-                
-                const targetForScreen = obj.userData.isEgg ? obj : obj;
-                const screenPos = targetForScreen.position.clone().project(camera);
-                startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
-            }
-        } else if (!e.target.classList.contains('color-dot') && !e.target.classList.contains('btn')) { deselectAll(); }
+            dragTarget = hits[0].object; controls.enabled = false; isDragging = true;
+            if(dragTarget.userData.isEgg) selectEgg(dragTarget);
+            startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
+            if(dragTarget.userData.isHandle) { mouseButton = e.button; startScale = currentEgg.userData.data.scale.clone(); }
+            const sPos = dragTarget.position.clone().project(camera);
+            startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+        } else if (!e.target.classList.contains('color-dot')) deselectAll();
     }
 
     function onMove(e) {
+        if (isPlacementMode) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; }
+            return;
+        }
+        if (!dragTarget || !currentEgg) return;
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
-        if (isPlacementMode) {
-            let intersect = new THREE.Vector3();
-            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect); ghostEgg.position.y += 10; ghostEgg.visible = true; }
-            return;
-        }
-        if (!dragTarget || !currentEgg) return;
-
-        // 회전 조작
         if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
-            const screenPos = dragTarget.position.clone().project(camera);
-            const currentAngle = Math.atan2(e.clientY - (rect.top + (1 - screenPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + screenPos.x) * rect.width / 2));
-            let deltaAngle = currentAngle - startMouseAngle;
-            const axis = new THREE.Vector3();
-            if (dragTarget === rotX_H) axis.set(1, 0, 0); else if (dragTarget === rotY_H) axis.set(0, 1, 0); else axis.set(0, 0, 1);
-            if (axis.clone().applyQuaternion(currentEgg.quaternion).dot(camera.getWorldDirection(new THREE.Vector3()).negate()) < 0) deltaAngle *= -1;
-            currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle));
-        } 
-        // 💡 에그 몸체 드래그 이동 (자유 이동)
-        else if (dragTarget.userData.isEgg) {
+            const sPos = dragTarget.position.clone().project(camera);
+            const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+            const axis = dragTarget === rotX_H ? new THREE.Vector3(1,0,0) : dragTarget === rotY_H ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+            currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle)));
+        } else if (dragTarget.userData.isEgg) {
+            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) currentEgg.position.copy(intersect);
+        } else if (dragTarget.userData.isHandle) {
+            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             let intersect = new THREE.Vector3();
-            const planeNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
-            const plane = new THREE.Plane(planeNormal, -startPos.dot(planeNormal));
-            if (raycaster.ray.intersectPlane(plane, intersect)) { currentEgg.position.copy(intersect); }
-        }
-        // 💡 하이브리드 핸들 조작 (이도류!)
-        else if (dragTarget.userData.isHybridHandle) {
-            let intersect = new THREE.Vector3();
-            const planeNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
-            const plane = new THREE.Plane(planeNormal, -dragTarget.position.dot(planeNormal));
             if (raycaster.ray.intersectPlane(plane, intersect)) {
-                // 핸들 시작점 대비 이동량 (월드 좌표)
-                const diff = intersect.clone().sub(dragTarget.position);
-                // 로컬 좌표로 변환 (에그의 회전 고려)
-                const localDiff = diff.clone().applyQuaternion(currentEgg.quaternion.clone().invert());
+                const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
+                const data = currentEgg.userData.data, id = dragTarget.userData.id;
                 
-                // 💡 기능 분리: 좌클릭 vs 우클릭
-                if (mouseButton === 0) { 
-                    // 💡 좌클릭 (마우스 0): 전체 Scale 조절 (Parametric)
-                    const axis = dragTarget.userData.axis;
-                    const scOffs = currentEgg.userData.scOffs;
-                    // 주축(axis)에 따른 대칭 스케일링 (Y축은 BASE_H, 나머지는 BASE_R 고려)
-                    if (axis === 'y') {
-                        const deltaScale = localDiff.y / BASE_H;
-                        // 대칭으로 커지거나 작아짐 (startPos 고정)
-                        scOffs.scale.y = Math.max(0.1, startScale.y + deltaScale * 2); 
-                    } else if (axis === 'x') { scOffs.scale.x = Math.max(0.1, startScale.x + localDiff.x / BASE_R * 2); }
-                      else if (axis === 'z') { scOffs.scale.z = Math.max(0.1, startScale.z + localDiff.z / BASE_R * 2); }
-                } 
-                else if (mouseButton === 2) { 
-                    // 💡 우클릭 (마우스 2): 국소 FFD 스컬프팅 (Sculpting)
-                    const handleId = dragTarget.userData.handleId;
-                    // 해당 면의 오프셋 갱신
-                    currentEgg.userData.scOffs.offsets[handleId].add(localDiff);
+                if (mouseButton === 0) { // 💡 좌클릭: 앵커 스케일링 (v5.21.0 로직)
+                    if (id < 2) { // Y
+                        const dir = id === 0 ? 1 : -1;
+                        data.scale.y = Math.max(0.1, startScale.y + (localDiff.y * dir / BASE_H));
+                        const move = (data.scale.y - startScale.y) * BASE_H / 2 * dir;
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, move, 0).applyQuaternion(currentEgg.quaternion));
+                    } else if (id < 4) { // X
+                        const dir = id === 3 ? 1 : -1;
+                        data.scale.x = Math.max(0.1, startScale.x + (localDiff.x * dir / BASE_R));
+                        const move = (data.scale.x - startScale.x) * BASE_R / 2 * dir;
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(move, 0, 0).applyQuaternion(currentEgg.quaternion));
+                    } else { // Z
+                        const dir = id === 4 ? 1 : -1;
+                        data.scale.z = Math.max(0.1, startScale.z + (localDiff.z / BASE_R));
+                        const move = (data.scale.z - startScale.z) * BASE_R / 2 * dir;
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, move).applyQuaternion(currentEgg.quaternion));
+                    }
+                } else if (mouseButton === 2) { // 💡 우클릭: 앵커 자유변형 (Sculpt)
+                    data.offsets[id].add(localDiff);
                 }
-                
-                // 💡 핵심: 하이브리드(Scale+FFD) 메쉬 정점 재계산
-                updateHybridMesh(currentEgg);
+                updateMesh(currentEgg);
             }
         }
     }
 
-    // 💡 수학적 핵심: Scale 및 6개 면 오프셋 기반 하이브리드 메쉬 변형 로직 (v5.22.0 IDW 기반 개량)
-    function updateHybridMesh(egg) {
-        const geo = egg.geometry;
-        const origPos = geo.userData.origPos;
-        const positions = geo.attributes.position;
-        const scOffs = egg.userData.scOffs;
-        const scale = scOffs.scale;
-        const offsets = scOffs.offsets;
-
-        // 원본 제어점 로컬 위치 (변형 전, 6개의 면 중심)
-        const ctrlPointsLocal = [
-            new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -10, 0), // Top (Y+), Bottom (Y-)
-            new THREE.Vector3(-7, 0, 0), new THREE.Vector3(7, 0, 0),   // Left (X-), Right (X+)
-            new THREE.Vector3(0, 0, 7), new THREE.Vector3(0, 0, -7)    // Front (Z+), Back (Z-)
-        ];
-
-        for (let i = 0; i < origPos.count; i++) {
-            const vx = origPos.getX(i); const vy = origPos.getY(i); const vz = origPos.getZ(i);
-            const v = new THREE.Vector3(vx, vy, vz);
-            
-            // 💡 1단계: 전체 Scale 적용 (대칭 변형)
-            const scaledV = v.clone().multiply(scale);
-            
-            // 💡 2단계: 국소 FFD 스컬프팅 적용 (IDW 알고리즘)
-            let totalWeight = 0;
-            const sculptOff = new THREE.Vector3();
-
+    function updateMesh(egg) {
+        const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos;
+        const { scale, offsets } = egg.userData.data;
+        const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
+        for (let i = 0; i < orig.count; i++) {
+            const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
+            let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                // 원본 정점과 해당 면 제어점의 거리 (이 영향력 범위는 Scale과 무관해야 자연스러움)
-                const dist = v.distanceTo(ctrlPointsLocal[j]);
-                // 가중치 계산 (influence range조절)
-                const weight = 1 / Math.pow(dist + 1, 3.5); 
-                totalWeight += weight;
-                // 해당 제어점의 오프셋만큼 정점 이동 (가중치 적용)
-                sculptOff.add(offsets[j].clone().multiplyScalar(weight));
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); tw += w;
+                sOff.add(offsets[j].clone().multiplyScalar(w));
             }
-            // 가중치 정규화 및 최종 위치 계산
-            const finalV = scaledV.add(sculptOff.divideScalar(totalWeight));
-
-            // 갱신된 위치 적용
-            positions.setXYZ(i, finalV.x, finalV.y, finalV.z);
+            const fV = sV.add(sOff.divideScalar(tw));
+            pos.setXYZ(i, fV.x, fV.y, fV.z);
         }
-        positions.needsUpdate = true; // 메쉬 갱신 알림
-        // 아웃라인 메쉬도 동일하게 변형
-        egg.userData.outline.geometry.attributes.position.copy(positions);
-        egg.userData.outline.geometry.attributes.position.needsUpdate = true;
+        pos.needsUpdate = true;
+        egg.userData.outline.geometry.attributes.position.copy(pos).needsUpdate = true;
     }
 
-    function onUp() { if (isDragging) { captureState(); isDragging = false; } dragTarget = null; controls.enabled = true; }
+    function onUp() { if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; }
+    function captureState() { /* History logic */ }
+    function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
+    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); selectEgg(egg); togglePlacementMode(); }
 
     function animate() {
         requestAnimationFrame(animate);
         if (currentEgg) {
-            const p = currentEgg.position, q = currentEgg.quaternion;
-            const scOffs = currentEgg.userData.scOffs;
-            const scale = scOffs.scale;
-            const offsets = scOffs.offsets;
-            
-            // 💡 하이브리드 핸들 위치 업데이트: (로컬 면 중심 * Scale) + 오프셋 -> 월드 좌표
-            const ctrlPointsLocal = [
-                new THREE.Vector3(0, 10, 0), new THREE.Vector3(0, -10, 0),
-                new THREE.Vector3(-7, 0, 0), new THREE.Vector3(7, 0, 0),
-                new THREE.Vector3(0, 0, 7), new THREE.Vector3(0, 0, -7)
-            ];
-
-            hybridHandles.forEach((h, i) => {
-                // (원본 로컬 위치 * Scale) + 현재 변형 오프셋
-                const localPos = ctrlPointsLocal[i].clone().multiply(scale).add(offsets[i]);
-                // 가시성을 위해 오프셋 방향으로 살짝 띄움 (옵션)
-                const offsetDir = ctrlPointsLocal[i].clone().normalize();
-                localPos.add(offsetDir.multiplyScalar(HANDLE_OFFSET));
-                // 월드 좌표로 변환
-                h.position.copy(p).add(localPos.applyQuaternion(q));
+            const { scale, offsets } = currentEgg.userData.data, p = currentEgg.position, q = currentEgg.quaternion;
+            const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
+            handles.forEach((h, i) => {
+                const lP = ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET));
+                h.position.copy(p).add(lP.applyQuaternion(q));
             });
-            
-            // 회전 링 업데이트 (기존 유지)
-            [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if (r === rotX_H) r.rotateY(Math.PI/2); if (r === rotY_H) r.rotateX(Math.PI/2); });
+            [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2); });
         }
         renderer.render(scene, camera); controls.update();
     }
