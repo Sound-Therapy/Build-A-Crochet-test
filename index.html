@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.25.1 - Stability Patch</title>
+    <title>Build-A-Crochet v5.25.2 - Perfect Anchor</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -24,7 +24,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.25.1</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.25.2</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -44,7 +44,7 @@
     let history = [];
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
-    const SENSITIVITY = 0.65; // 💡 조작 감도 (낮을수록 정밀함)
+    const SENSITIVITY = 0.7;
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
@@ -67,6 +67,9 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        
+        // 초기 상태 저장
+        captureState();
         animate();
     }
 
@@ -98,9 +101,9 @@
             scene.add(m); return m;
         };
         handles = [
-            makeH(0, 'y'), makeH(1, 'y'), // Top, Bottom
-            makeH(2, 'x'), makeH(3, 'x'), // Left, Right
-            makeH(4, 'z'), makeH(5, 'z')  // Front, Back
+            makeH(0, 'y'), makeH(1, 'y'), // Top(0), Bottom(1)
+            makeH(2, 'x'), makeH(3, 'x'), // Left(2), Right(3)
+            makeH(4, 'z'), makeH(5, 'z')  // Front(4), Back(5)
         ];
         const makeR = (col) => {
             const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.3, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthTest: false }));
@@ -159,27 +162,27 @@
                 const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const data = currentEgg.userData.data, id = dragTarget.userData.id;
                 
-                if (mouseButton === 0) { // 💡 좌클릭: 안정화된 앵커 스케일링
-                    if (id < 2) { // Y
+                if (mouseButton === 0) { // 💡 좌클릭: 완벽한 앵커 스케일링
+                    if (id < 2) { // Y (상하)
                         const dir = id === 0 ? 1 : -1;
                         const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY;
                         data.scale.y = Math.max(0.1, startScale.y + ds);
-                        const move = (data.scale.y - startScale.y) * BASE_H / 2 * dir;
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, move, 0).applyQuaternion(currentEgg.quaternion));
-                    } else if (id < 4) { // X
+                        const moveDist = (data.scale.y - startScale.y) * BASE_H / 2 * dir;
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, moveDist, 0).applyQuaternion(currentEgg.quaternion));
+                    } else if (id < 4) { // X (좌우)
                         const dir = id === 3 ? 1 : -1;
-                        const ds = (localDiff.x * dir / BASE_R) * SENSITIVITY;
+                        const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY; // 지름 기준 보정
                         data.scale.x = Math.max(0.1, startScale.x + ds);
-                        const move = (data.scale.x - startScale.x) * BASE_R / 2 * dir;
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(move, 0, 0).applyQuaternion(currentEgg.quaternion));
-                    } else { // Z
+                        const moveDist = (data.scale.x - startScale.x) * BASE_R * dir; // 반지름만큼 이동
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(moveDist, 0, 0).applyQuaternion(currentEgg.quaternion));
+                    } else { // Z (앞뒤)
                         const dir = id === 4 ? 1 : -1;
-                        const ds = (localDiff.z * dir / BASE_R) * SENSITIVITY;
+                        const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY;
                         data.scale.z = Math.max(0.1, startScale.z + ds);
-                        const move = (data.scale.z - startScale.z) * BASE_R / 2 * dir;
-                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, move).applyQuaternion(currentEgg.quaternion));
+                        const moveDist = (data.scale.z - startScale.z) * BASE_R * dir;
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, moveDist).applyQuaternion(currentEgg.quaternion));
                     }
-                } else if (mouseButton === 2) { // 💡 우클릭: 앵커 자유변형
+                } else if (mouseButton === 2) { 
                     data.offsets[id].add(localDiff);
                 }
                 updateMesh(currentEgg);
@@ -206,22 +209,56 @@
     }
 
     function onUp() { if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; }
+
     function captureState() {
-        const state = scene.children.filter(o => o.userData.isEgg).map(e => ({ pos: e.position.clone(), rot: e.quaternion.clone(), data: JSON.parse(JSON.stringify(e.userData.data)), col: e.material.color.getHex() }));
-        history.push(JSON.stringify(state)); if (history.length > 50) history.shift();
+        const eggs = scene.children.filter(o => o.userData.isEgg);
+        const state = eggs.map(e => ({
+            pos: {x: e.position.x, y: e.position.y, z: e.position.z},
+            rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w},
+            scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z},
+            offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})),
+            col: e.material.color.getHex()
+        }));
+        history.push(JSON.stringify(state));
+        if (history.length > 50) history.shift();
     }
+
     window.executeUndo = function() {
-        if (history.length < 2) return; history.pop(); const state = JSON.parse(history[history.length - 1]);
-        scene.children.filter(o => o.userData.isEgg).forEach(e => { e.geometry.dispose(); e.material.dispose(); scene.remove(e); });
+        if (history.length < 2) return;
+        history.pop(); 
+        const stateStr = history[history.length - 1];
+        const state = JSON.parse(stateStr);
+
+        scene.children.filter(o => o.userData.isEgg).forEach(e => {
+            e.geometry.dispose(); e.material.dispose(); scene.remove(e);
+        });
+
         state.forEach(d => {
-            const e = createEgg(new THREE.Color(d.col)); e.position.copy(d.pos); e.quaternion.copy(d.rot);
-            e.userData.data = { scale: new THREE.Vector3(d.data.scale.x, d.data.scale.y, d.data.scale.z), offsets: d.data.offsets.map(v => new THREE.Vector3(v.x, v.y, v.z)) };
-            updateMesh(e); scene.add(e);
+            const e = createEgg(new THREE.Color(d.col));
+            e.position.set(d.pos.x, d.pos.y, d.pos.z);
+            e.quaternion.set(d.rot.x, d.rot.y, d.rot.z, d.rot.w);
+            e.userData.data.scale.set(d.scale.x, d.scale.y, d.scale.z);
+            e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z));
+            updateMesh(e);
+            scene.add(e);
         });
         deselectAll();
     };
-    function togglePlacementMode() { isPlacementMode = !isPlacementMode; ghostEgg.visible = isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
-    function spawnEgg(pos) { const egg = createEgg(0xff69b4); egg.position.copy(pos).y += 10; scene.add(egg); captureState(); selectEgg(egg); togglePlacementMode(); }
+
+    function togglePlacementMode() { 
+        isPlacementMode = !isPlacementMode; 
+        ghostEgg.visible = isPlacementMode; 
+        document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); 
+    }
+
+    function spawnEgg(pos) { 
+        const egg = createEgg(0xff69b4); 
+        egg.position.copy(pos).y += 10; 
+        scene.add(egg); 
+        captureState(); 
+        selectEgg(egg); 
+        togglePlacementMode(); 
+    }
 
     function animate() {
         requestAnimationFrame(animate);
@@ -232,7 +269,11 @@
                 const lP = ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET));
                 h.position.copy(p).add(lP.applyQuaternion(q));
             });
-            [rotX_H, rotY_H, rotZ_H].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2); });
+            [rotX_H, rotY_H, rotZ_H].forEach(r => { 
+                r.position.copy(p); r.quaternion.copy(q); 
+                if(r===rotX_H) r.rotateY(Math.PI/2); 
+                if(r===rotY_H) r.rotateX(Math.PI/2); 
+            });
         }
         renderer.render(scene, camera); controls.update();
     }
