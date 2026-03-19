@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.30.4 - Visual Polish</title>
+    <title>Build-A-Crochet v5.30.5 - Clean Render Mode</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.30.4</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.30.5</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -60,8 +60,8 @@
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
-        scene.add(new THREE.AmbientLight(0xffffff, 1.2));
-        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
+        scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8); dirLight.position.set(10, 20, 10); scene.add(dirLight);
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
@@ -80,25 +80,21 @@
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
         geo.userData.origPos = geo.attributes.position.clone();
-        const mat = new THREE.MeshPhongMaterial({ color, wireframe: true, transparent: true, opacity: isGhost ? 0.3 : 0.8 });
+        
+        // ⭐ 외곽선 대신 Phong Material의 투명도와 와이어프레임 조합 사용
+        const mat = new THREE.MeshPhongMaterial({ 
+            color, 
+            wireframe: true, 
+            transparent: true, 
+            opacity: isGhost ? 0.3 : 0.7,
+            shininess: 100,
+            specular: 0x444444
+        });
         const egg = new THREE.Mesh(geo, mat);
         
         if (!isGhost) {
             egg.userData.isEgg = true;
             egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: Array.from({length: 6}, () => new THREE.Vector3()) };
-            
-            // ⭐ 외곽선 재질 개선: PolygonOffset으로 겹침 방지
-            const outlineMat = new THREE.MeshBasicMaterial({ 
-                color: 0x000000, 
-                side: THREE.BackSide,
-                polygonOffset: true,
-                polygonOffsetFactor: 1,
-                polygonOffsetUnits: 1
-            });
-            const outline = new THREE.Mesh(geo, outlineMat);
-            outline.scale.set(1.02, 1.02, 1.02); 
-            egg.add(outline); 
-            egg.userData.outline = outline;
         }
         return egg;
     }
@@ -118,15 +114,9 @@
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
-        
-        // ⭐ 동적 외곽선 스케일: 물체가 작아지면 외곽선 확장 비율도 조정
-        const avgScale = (scale.x + scale.y + scale.z) / 3;
-        const oS = 1 + (0.02 / Math.max(0.1, avgScale)); 
-        egg.userData.outline.scale.set(oS, oS, oS);
-        egg.userData.outline.geometry.attributes.position.copy(pos).needsUpdate = true;
     }
 
-    // --- (이하 나머지 로직은 5.30.3과 동일) ---
+    // Gizmo 및 조작 로직 (5.30.3의 안정적인 자유변형 로직 유지)
     function createHandles() {
         const makeH = (id) => {
             const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
@@ -156,7 +146,10 @@
         groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
     }
     function updateSelectionVisuals(selected) {
-        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.visible = true);
+        scene.children.filter(o => o.userData.isEgg).forEach(e => {
+            // 선택된 객체는 투명도를 높여 강조
+            e.material.opacity = selected.includes(e) ? 0.9 : 0.7;
+        });
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
         groupGizmo.visible = false; document.getElementById('palette').style.display = 'none';
         currentSelection = selected;
