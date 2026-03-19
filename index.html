@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.29.2 - Final Control Sync</title>
+    <title>Build-A-Crochet v5.29.3 - Group Trinity</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.29.2</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.29.3</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -41,7 +41,11 @@
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
-    let startScale, startPos, startRotation, mouseButton;
+    // ⭐ 그룹 변형 Gizmo 관련 변수
+    let groupGizmo, groupHandles = [], groupRotHandles = [];
+    let groupStartCenter = new THREE.Vector3(), groupStartBounds = new THREE.Box3();
+    
+    let startScale, startPos, startRotation, mouseButton, startGroupData = [];
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], currentSelection = [];
@@ -66,7 +70,7 @@
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
         
-        createHandles(); createGhost();
+        createHandles(); createGhost(); createGroupGizmo();
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
@@ -116,29 +120,79 @@
             scene.add(m); return m;
         };
         handles = [0,1,2,3,4,5].map(id => makeH(id));
-        const makeR = (col) => {
+        const makeR = (col, axis) => {
             const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.3, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, depthTest: false }));
-            r.renderOrder = 998; r.visible = false; scene.add(r); return r;
+            r.renderOrder = 998; r.visible = false; r.userData = { isRotationHandle: true, axis }; scene.add(r); return r;
         };
-        rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
+        rotX_H = makeR(0xff0000, 'x'); rotY_H = makeR(0x00ff00, 'y'); rotZ_H = makeR(0x0000ff, 'z');
     }
 
+    // ⭐ 그룹 Gizmo 생성 (박스 + 스케일 핸들 + 회전 핸들)
+    function createGroupGizmo() {
+        groupGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)), 0xff69b4);
+        groupGizmo.renderOrder = 997; groupGizmo.visible = false; scene.add(groupGizmo);
+        
+        const makeG = (id, pivot) => {
+            const m = new THREE.Mesh(new THREE.SphereGeometry(2.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff69b4, depthTest: false }));
+            m.renderOrder = 999; m.visible = false; m.userData = { isGroupHandle: true, id, pivot };
+            scene.add(m); return m;
+        };
+        // 8개 꼭짓점 핸들 (id는 Box3.getCenter 기준 위치, pivot은 대각선 반대편 앵커)
+        groupHandles = [
+            makeG(0, new THREE.Vector3(1,1,1)), makeG(1, new THREE.Vector3(1,1,-1)), makeG(2, new THREE.Vector3(1,-1,1)), makeG(3, new THREE.Vector3(1,-1,-1)),
+            makeG(4, new THREE.Vector3(-1,1,1)), makeG(5, new THREE.Vector3(-1,1,-1)), makeG(6, new THREE.Vector3(-1,-1,1)), makeG(7, new THREE.Vector3(-1,-1,-1))
+        ];
+        
+        const makeGR = (col, axis) => {
+            const r = new THREE.Mesh(new THREE.TorusGeometry(25, 0.5, 16, 64), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, depthTest: false }));
+            r.renderOrder = 998; r.visible = false; r.userData = { isGroupRotationHandle: true, axis }; scene.add(r); return r;
+        };
+        groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
+    }
+
+    // ⭐ 선택 상태에 따른 Gizmo 업데이트 (단일 vs 그룹)
     function updateSelectionVisuals(selected) {
         scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
+        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
+        groupGizmo.visible = false; [...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
+        document.getElementById('palette').style.display = 'none';
+
         currentSelection = selected;
-        if (selected.length === 0) { deselectAll(); return; }
+        if (selected.length === 0) { currentEgg = null; return; }
         selected.forEach(e => e.userData.outline.scale.set(1.1, 1.1, 1.1));
-        currentEgg = selected[0];
-        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
         document.getElementById('palette').style.display = 'grid';
+
+        if (selected.length === 1) {
+            // 단일 선택: 기존 변형 Gizmo
+            currentEgg = selected[0];
+            [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
+        } else {
+            // ⭐ 다중 선택: 그룹 Gizmo
+            currentEgg = null; // 그룹 모드에선 개별 변형 비활성화
+            groupGizmo.visible = true; [...groupHandles, ...groupRotHandles].forEach(h => h.visible = true);
+            updateGroupGizmoVisuals();
+        }
     }
 
-    function deselectAll() {
-        currentEgg = null; currentSelection = [];
-        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = false);
-        document.getElementById('palette').style.display = 'none';
-        scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
+    // ⭐ 그룹 Gizmo 위치/크기 업데이트
+    function updateGroupGizmoVisuals() {
+        if (currentSelection.length < 2) return;
+        const box = new THREE.Box3();
+        currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
+        
+        const helperBox = new THREE.Mesh(new THREE.BoxGeometry(box.max.x-box.min.x, box.max.y-box.min.y, box.max.z-box.min.z));
+        box.getCenter(helperBox.position); groupGizmo.update(helperBox);
+        
+        const size = box.getSize(new THREE.Vector3()), center = box.getCenter(new THREE.Vector3());
+        const corners = [
+            new THREE.Vector3(-0.5, 0.5, 0.5), new THREE.Vector3(-0.5, 0.5, -0.5), new THREE.Vector3(-0.5, -0.5, 0.5), new THREE.Vector3(-0.5, -0.5, -0.5),
+            new THREE.Vector3(0.5, 0.5, 0.5), new THREE.Vector3(0.5, 0.5, -0.5), new THREE.Vector3(0.5, -0.5, 0.5), new THREE.Vector3(0.5, -0.5, -0.5)
+        ];
+        groupHandles.forEach((h, i) => h.position.copy(center).add(corners[i].clone().multiply(size)));
+        groupRotHandles.forEach((r, i) => { r.position.copy(center); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2); });
     }
+
+    function deselectAll() { updateSelectionVisuals([]); }
 
     function onDown(e) {
         if (e.target.tagName !== 'CANVAS') return;
@@ -146,19 +200,28 @@
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
-        const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)]);
+        const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles, ...scene.children.filter(o => o.userData.isEgg)]);
         
         if (hits.length > 0) {
-            // 배치 모드여도 이미 있는 객체를 클릭하면 변형 모드 우선
             dragTarget = hits[0].object; isDragging = true; mouseButton = e.button;
             controls.enabled = false;
+            
             if(dragTarget.userData.isEgg) {
                 if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
-                else if (!currentSelection.includes(dragTarget)) { currentSelection.push(dragTarget); updateSelectionVisuals(currentSelection); }
+                else if (!currentSelection.includes(dragTarget)) { updateSelectionVisuals([...currentSelection, dragTarget]); }
             }
-            startRotation = currentEgg ? currentEgg.quaternion.clone() : null;
-            startPos = currentEgg ? currentEgg.position.clone() : null;
-            if(dragTarget.userData.isHandle) startScale = currentEgg.userData.data.scale.clone();
+            
+            // 초기값 저장
+            if (currentEgg) {
+                startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
+                if(dragTarget.userData.isHandle) startScale = currentEgg.userData.data.scale.clone();
+            } else if (currentSelection.length > 1) {
+                // ⭐ 그룹 초기 데이터 저장
+                const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
+                box.getCenter(groupStartCenter); box.getSize(groupStartBounds.getSize(new THREE.Vector3()));
+                startGroupData = currentSelection.map(e => ({ pos: e.position.clone(), scale: e.userData.data.scale.clone(), rot: e.quaternion.clone() }));
+            }
+            
             const sPos = dragTarget.position.clone().project(camera);
             startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
         } else {
@@ -168,22 +231,17 @@
                 controls.enabled = true; deselectAll();
             } else if (e.button === 2) {
                 isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
-                selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
-                controls.enabled = false;
+                selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px'; deselectAll(); controls.enabled = false;
             }
         }
     }
 
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-
         if (isPlacementMode) {
-            let intersect = new THREE.Vector3(); 
-            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { 
-                ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; 
-            }
+            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; }
             return;
         }
         if (isBoxSelecting) {
@@ -191,39 +249,88 @@
             const w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
             selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
         }
-        if (!dragTarget || !currentEgg) return;
+        if (!dragTarget || (selectedGroup変形() && false)) return; // ⭐ 그룹 변형 중 controls 방지
+        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
-        if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
-            const sPos = dragTarget.position.clone().project(camera);
-            const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
-            const axis = dragTarget === rotX_H ? new THREE.Vector3(1,0,0) : dragTarget === rotY_H ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
-            currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle)));
-        } else if (dragTarget.userData.isEgg) {
-            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) {
-                if(!e.ctrlKey || mouseButton !== 0) { const diff = intersect.sub(currentEgg.position); currentSelection.forEach(e => e.position.add(diff)); }
-                else currentEgg.position.copy(intersect);
+        // --- 단일 변형 ---
+        if (currentEgg) {
+            if ([rotX_H, rotY_H, rotZ_H].includes(dragTarget)) {
+                const sPos = dragTarget.position.clone().project(camera);
+                const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+                const axis = dragTarget === rotX_H ? new THREE.Vector3(1,0,0) : dragTarget === rotY_H ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+                currentEgg.quaternion.multiplyQuaternions(startRotation, new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle)));
+            } else if (dragTarget.userData.isEgg) {
+                const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+                let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) currentEgg.position.copy(intersect);
+            } else if (dragTarget.userData.isHandle) {
+                const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+                let intersect = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(plane, intersect)) {
+                    const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
+                    const data = currentEgg.userData.data, id = dragTarget.userData.id;
+                    if (mouseButton === 0 && !e.ctrlKey) { // 좌클릭: 전체 비례
+                        const dir = (id === 0 || id === 3 || id === 4) ? 1 : -1;
+                        const ds = (id < 2 ? localDiff.y : (id < 4 ? localDiff.x : localDiff.z)) * dir / (id < 2 ? BASE_H : BASE_R * 2) * SENSITIVITY;
+                        data.scale.addScalar(ds); data.scale.x = Math.max(0.1, data.scale.x); data.scale.y = Math.max(0.1, data.scale.y); data.scale.z = Math.max(0.1, data.scale.z);
+                        currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0)), 0).applyQuaternion(currentEgg.quaternion));
+                    } else if (mouseButton === 2) { // 우클릭: 한 방향
+                        if (id < 2) { const dir = id === 0 ? 1 : -1; data.scale.y = Math.max(0.1, startScale.y + (localDiff.y * dir / BASE_H) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
+                        else if (id < 4) { const dir = id === 3 ? 1 : -1; data.scale.x = Math.max(0.1, startScale.x + (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
+                        else { const dir = id === 4 ? 1 : -1; data.scale.z = Math.max(0.1, startScale.z + (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
+                    } else if (mouseButton === 0 && e.ctrlKey) { data.offsets[id].add(localDiff); }
+                    updateMesh(currentEgg);
+                }
             }
-        } else if (dragTarget.userData.isHandle) {
+        }
+        
+        // --- ⭐ 그룹 변형 ---
+        else if (currentSelection.length > 1) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             let intersect = new THREE.Vector3();
             if (raycaster.ray.intersectPlane(plane, intersect)) {
-                const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
-                const data = currentEgg.userData.data, id = dragTarget.userData.id;
-                if (mouseButton === 0 && !e.ctrlKey) {
-                    const dir = (id === 0 || id === 3 || id === 4) ? 1 : -1;
-                    const ds = (id < 2 ? localDiff.y : (id < 4 ? localDiff.x : localDiff.z)) * dir / (id < 2 ? BASE_H : BASE_R * 2) * SENSITIVITY;
-                    data.scale.addScalar(ds); data.scale.x = Math.max(0.1, data.scale.x); data.scale.y = Math.max(0.1, data.scale.y); data.scale.z = Math.max(0.1, data.scale.z);
-                    currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0)), 0).applyQuaternion(currentEgg.quaternion));
-                } else if (mouseButton === 2) {
-                    if (id < 2) { const dir = id === 0 ? 1 : -1; data.scale.y = Math.max(0.1, startScale.y + (localDiff.y * dir / BASE_H) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
-                    else if (id < 4) { const dir = id === 3 ? 1 : -1; data.scale.x = Math.max(0.1, startScale.x + (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
-                    else { const dir = id === 4 ? 1 : -1; data.scale.z = Math.max(0.1, startScale.z + (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
-                } else if (mouseButton === 0 && e.ctrlKey) { data.offsets[id].add(localDiff); }
-                updateMesh(currentEgg);
+                if (dragTarget.userData.isGroupHandle) {
+                    // ⭐ 그룹 모든 방향 일정 비율 크기 조절
+                    const id = dragTarget.userData.id, pivot = dragTarget.userData.pivot;
+                    const ds = intersect.clone().sub(dragTarget.position).applyQuaternion(groupRotHandles[1].quaternion.clone().invert()).y / BASE_H * SENSITIVITY;
+                    const scaleFactor = Math.max(0.01, 1 + ds * 2);
+                    const currentCenter = groupStartCenter.clone();
+                    
+                    // 앵커(대각선 반대편) 고정
+                    const anchorPos = cornersToVector(pivot).multiply(groupStartBounds.getSize(new THREE.Vector3())).divideScalar(2).add(groupStartCenter);
+                    
+                    currentSelection.forEach((e, i) => {
+                        const sd = startGroupData[i];
+                        // 스케일 변경
+                        e.userData.data.scale.copy(sd.scale).multiplyScalar(scaleFactor);
+                        updateMesh(e);
+                        // 앵커 기준 위치 변경
+                        const relPos = sd.pos.clone().sub(anchorPos).multiplyScalar(scaleFactor);
+                        e.position.copy(anchorPos).add(relPos);
+                    });
+                } else if (dragTarget.userData.isGroupRotationHandle) {
+                    // ⭐ 그룹 전체 회전
+                    const sPos = dragTarget.position.clone().project(camera);
+                    const angle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
+                    const axis = dragTarget === groupRotHandles[0] ? new THREE.Vector3(1,0,0) : dragTarget === groupRotHandles[1] ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
+                    const rotQ = new THREE.Quaternion().setFromAxisAngle(axis, -(angle - startMouseAngle));
+                    
+                    currentSelection.forEach((e, i) => {
+                        const sd = startGroupData[i];
+                        // 위치 회전
+                        const relPos = sd.pos.clone().sub(groupStartCenter).applyQuaternion(rotQ);
+                        e.position.copy(groupStartCenter).add(relPos);
+                        // 방향 회전
+                        e.quaternion.multiplyQuaternions(rotQ, sd.rot);
+                    });
+                }
+                updateGroupGizmoVisuals();
             }
         }
     }
+    // Helper to map 앵커 위치
+    function cornersToVector(pivot) { return new THREE.Vector3(pivot.x * -0.5, pivot.y * -0.5, pivot.z * -0.5); }
+    function selectedGroup변형() { return dragTarget && (dragTarget.userData.isGroupHandle || dragTarget.userData.isGroupRotationHandle); }
 
     function onUp(e) {
         if (isBoxSelecting) {
