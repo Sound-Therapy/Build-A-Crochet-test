@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.29.8 - Legacy Core</title>
+    <title>Build-A-Crochet v5.29.9 - Hard-Locked</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.29.8</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.29.9</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -43,7 +43,7 @@
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let groupGizmo, groupHandles = [], groupRotHandles = [];
     let startScale, startPos, startRotation, mouseButton, startGroupData = [], startMouseAngle = 0;
-    let startHandleDist = 1, anchorPos = new THREE.Vector3();
+    let startHandleDist = 1, worldAnchorPos = new THREE.Vector3();
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], currentSelection = [];
@@ -174,11 +174,8 @@
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
         
-        // ⭐ 배치 모드 활성화 (무조건 원점)
-        if (isPlacementMode && e.button === 0) {
-            spawnEgg(new THREE.Vector3(0, 0, 0));
-            return;
-        }
+        // ⭐ 1순위: 배치 모드 (무조건 원점)
+        if (isPlacementMode && e.button === 0) { spawnEgg(new THREE.Vector3(0, 0, 0)); return; }
 
         const gizmoHits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if (gizmoHits.length > 0) {
@@ -189,13 +186,13 @@
             if (currentEgg) {
                 startRotation = currentEgg.quaternion.clone(); startPos = currentEgg.position.clone();
                 startScale = currentEgg.userData.data.scale.clone();
-                // ⭐ 5.28.2 앵커 포인트 계산 (반대편 고정)
                 if (dragTarget.userData.isHandle) {
                     const id = dragTarget.userData.id;
                     const oppId = (id % 2 === 0) ? id + 1 : id - 1;
                     const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
-                    anchorPos.copy(ctrls[oppId]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
-                    startHandleDist = intersect.distanceTo(anchorPos);
+                    // ⭐ 5.28.2 앵커: 반대편 핸들의 월드 좌표를 '박제'함
+                    worldAnchorPos.copy(ctrls[oppId]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
+                    startHandleDist = intersect.distanceTo(worldAnchorPos);
                 } else {
                     startHandleDist = intersect.distanceTo(currentEgg.position);
                 }
@@ -247,18 +244,19 @@
                 } else if (dragTarget.userData.isEgg) { currentEgg.position.copy(intersect); }
                 else if (dragTarget.userData.isHandle) {
                     const id = dragTarget.userData.id, data = currentEgg.userData.data;
-                    const curDist = intersect.distanceTo(anchorPos);
-                    const ratio = Math.max(0.01, curDist / startHandleDist); // ⭐ 5.28.2 거리 비율
+                    const curDist = intersect.distanceTo(worldAnchorPos);
+                    const ratio = Math.max(0.01, curDist / startHandleDist);
                     
-                    if (mouseButton === 0 && !e.ctrlKey) { // 좌클릭: 전체 비례
-                        data.scale.copy(startScale).multiplyScalar(ratio);
-                    } else if (mouseButton === 2) { // 우클릭: 한 방향 축 (Anchor 고정 로직)
+                    if (mouseButton === 0 && !e.ctrlKey) { data.scale.copy(startScale).multiplyScalar(ratio); } 
+                    else if (mouseButton === 2) { 
                         const dir = (id < 2) ? 'y' : (id < 4 ? 'x' : 'z');
                         data.scale.copy(startScale); data.scale[dir] *= ratio;
-                        // ⭐ 반대편 고정을 위한 위치 보정
+                        // ⭐ 하드 스냅(Hard-Snap) 보정: 스케일링 후 반대편 끝점이 worldAnchorPos에 정확히 오도록 에그 위치를 강제 고정
+                        updateMesh(currentEgg); // 먼저 메시 업데이트
                         const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
-                        const currentOppPos = ctrls[(id % 2 === 0 ? id + 1 : id - 1)].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(startPos);
-                        currentEgg.position.add(anchorPos.clone().sub(currentOppPos));
+                        const oppId = (id % 2 === 0) ? id + 1 : id - 1;
+                        const currentOppWorldPos = ctrls[oppId].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                        currentEgg.position.add(worldAnchorPos.clone().sub(currentOppWorldPos));
                     } else if (mouseButton === 0 && e.ctrlKey) {
                         const localIntersect = intersect.clone().applyMatrix4(currentEgg.matrixWorld.clone().invert());
                         const localStart = dragTarget.position.clone().applyMatrix4(currentEgg.matrixWorld.clone().invert());
