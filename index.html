@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.30.1 - Grounded Stability</title>
+    <title>Build-A-Crochet v5.30.2 - Fixed Free Deformation</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.30.1</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.30.2</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -251,20 +251,33 @@
                     const currentAngle = getMouseAngle(e, currentEgg);
                     const deltaAngle = currentAngle - lastMouseAngle;
                     const axis = dragTarget.userData.axis === 'x' ? new THREE.Vector3(1,0,0) : dragTarget.userData.axis === 'y' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
-                    currentEgg.quaternion.multiplyQuaternions(new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle), currentEgg.quaternion);
+                    currentEgg.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, -deltaAngle));
                     lastMouseAngle = currentAngle;
                 } else if (dragTarget.userData.isEgg) { currentEgg.position.copy(intersect); }
                 else if (dragTarget.userData.isHandle) {
-                    const id = dragTarget.userData.id, data = currentEgg.userData.data, curDist = intersect.distanceTo(worldAnchorPos), ratio = Math.max(0.01, curDist / startHandleDist);
-                    if (mouseButton === 0 && !e.ctrlKey) { data.scale.copy(startScale).multiplyScalar(ratio); } 
-                    else if (mouseButton === 2) { 
-                        const dir = (id < 2) ? 'y' : (id < 4 ? 'x' : 'z'); data.scale.copy(startScale); data.scale[dir] *= ratio;
-                        updateMesh(currentEgg); 
-                        const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)], oppId = (id % 2 === 0) ? id + 1 : id - 1;
-                        const currentOppPos = ctrls[oppId].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-                        currentEgg.position.add(worldAnchorPos.clone().sub(currentOppPos));
+                    const id = dragTarget.userData.id, data = currentEgg.userData.data;
+                    
+                    // ⭐ 자유 변형 로직 (Ctrl + 좌클릭) 복구
+                    if (mouseButton === 0 && e.ctrlKey) {
+                        const localI = intersect.clone().applyMatrix4(currentEgg.matrixWorld.clone().invert());
+                        const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
+                        const localS = ctrls[id].clone(); // 핸들의 원래 위치
+                        data.offsets[id].copy(localI.sub(localS)); // 차이만큼 오프셋 적용
+                        updateMesh(currentEgg);
+                    } 
+                    // 일반 크기 조절 (좌클릭 전체 / 우클릭 단방향)
+                    else {
+                        const curDist = intersect.distanceTo(worldAnchorPos), ratio = Math.max(0.01, curDist / startHandleDist);
+                        if (mouseButton === 0) { data.scale.copy(startScale).multiplyScalar(ratio); } 
+                        else if (mouseButton === 2) { 
+                            const dir = (id < 2) ? 'y' : (id < 4 ? 'x' : 'z'); data.scale.copy(startScale); data.scale[dir] *= ratio;
+                            updateMesh(currentEgg); 
+                            const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)], oppId = (id % 2 === 0) ? id + 1 : id - 1;
+                            const currentOppPos = ctrls[oppId].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                            currentEgg.position.add(worldAnchorPos.clone().sub(currentOppPos));
+                        }
+                        updateMesh(currentEgg);
                     }
-                    updateMesh(currentEgg);
                 }
             } else if (currentSelection.length > 1) {
                 const box = new THREE.Box3(); currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
@@ -273,7 +286,6 @@
                     const ratio = Math.max(0.01, intersect.distanceTo(groupCenter) / startHandleDist);
                     currentSelection.forEach((e, i) => { const sd = startGroupData[i]; e.userData.data.scale.copy(sd.scale).multiplyScalar(ratio); updateMesh(e); e.position.copy(groupCenter).add(sd.pos.clone().sub(groupCenter).multiplyScalar(ratio)); });
                 } else if (dragTarget.userData.isGroupRotationHandle) {
-                    // ⭐ 그룹 회전 안정화: 델타 각도 누적 방식 적용
                     const currentAngle = getMouseAngle(e, { position: groupCenter });
                     const deltaAngle = currentAngle - lastMouseAngle;
                     const axis = dragTarget.userData.axis === 'x' ? new THREE.Vector3(1,0,0) : dragTarget.userData.axis === 'y' ? new THREE.Vector3(0,1,0) : new THREE.Vector3(0,0,1);
