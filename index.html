@@ -2,14 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.31.0 - Solid Render</title>
+    <title>Build-A-Crochet v5.32.0 - Real-time CM Info</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
-        #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
-        .btn { width: 50px; height: 50px; cursor: pointer; border: 2px solid #fff; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 8px; background: #eee; }
-        .egg-btn { background: #ff69b4; border-radius: 50%; width: 40px; height: 50px; }
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; box-sizing: border-box; }
+        .btn { width: 60px; height: 60px; cursor: pointer; border: 2px solid #fff; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 8px; background: #eee; text-align: center; }
+        .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; }
         .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
-        .undo-btn { background: #333; color: white; }
+        .undo-btn { background: #333; color: white; height: 40px; }
+        
+        /* 실시간 치수 정보창 스타일 */
+        #size-info { width: 90%; margin-top: 20px; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; }
+        .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
+        .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
+        
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: repeat(2, 1fr); gap: 5px; border: 1px solid #ccc; z-index: 200; }
@@ -22,10 +28,17 @@
 <div id="panel">
     <div class="btn undo-btn" onclick="executeUndo()">UNDO</div>
     <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
+    
+    <div id="size-info">
+        <div class="info-label">SIZE (cm)</div>
+        <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
+        <div class="val-row"><span>H:</span><span id="info-h">0.0</span></div>
+        <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
+    </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.31.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.32.0</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -50,24 +63,24 @@
     
     const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
+    const CM_RATIO = 0.5; // 20 units = 10cm -> 1 unit = 0.5cm
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
-        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 80) / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 100) / window.innerHeight, 0.1, 1000);
         camera.position.set(60, 50, 80);
         renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth - 80, window.innerHeight);
+        renderer.setSize(window.innerWidth - 100, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         
-        // ⭐ Tinkercad 스타일 조명 설정 (주광 + 보조광)
-        scene.add(new THREE.AmbientLight(0xffffff, 0.6)); // 전체적인 밝기
-        const mainLight = new THREE.DirectionalLight(0xffffff, 0.6); // 주광 (우측 상단 전면)
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.6);
         mainLight.position.set(10, 20, 15);
         scene.add(mainLight);
-        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3); // 보조광 (좌측 하단 후면)
+        const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
         fillLight.position.set(-10, -10, -10);
         scene.add(fillLight);
         
@@ -88,16 +101,8 @@
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
         geo.userData.origPos = geo.attributes.position.clone();
-        
-        // ⭐ Tinkercad 스타일 Shading: MeshLambertMaterial 사용 (매트한 질감)
-        // 외곽선용 중첩 Mesh는 아예 생성하지 않음 -> 잔상 원천 차단
-        const mat = new THREE.MeshLambertMaterial({ 
-            color, 
-            transparent: true, 
-            opacity: isGhost ? 0.3 : 1.0, // 고스트는 투명하게, 본체는 불투명하게
-        });
+        const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
         const egg = new THREE.Mesh(geo, mat);
-        
         if (!isGhost) {
             egg.userData.isEgg = true;
             egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: Array.from({length: 6}, () => new THREE.Vector3()) };
@@ -120,10 +125,27 @@
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
-        // 외곽선 Mesh가 없으므로 외곽선 스케일 조정 로직 삭제
+        updateRealTimeSize(); // 변형 시 수치 갱신
     }
 
-    // --- (이하 나머지 조작 및 시스템 로직은 이전 버전과 100% 동일) ---
+    function updateRealTimeSize() {
+        const wSpan = document.getElementById('info-w'), hSpan = document.getElementById('info-h'), dSpan = document.getElementById('info-d');
+        if (currentSelection.length === 0) { wSpan.innerText = "0.0"; hSpan.innerText = "0.0"; dSpan.innerText = "0.0"; return; }
+        
+        const box = new THREE.Box3();
+        currentSelection.forEach(e => {
+            e.geometry.computeBoundingBox();
+            const b = e.geometry.boundingBox.clone();
+            b.applyMatrix4(e.matrixWorld);
+            box.union(b);
+        });
+        
+        const size = box.getSize(new THREE.Vector3());
+        wSpan.innerText = (size.x * CM_RATIO).toFixed(1);
+        hSpan.innerText = (size.y * CM_RATIO).toFixed(1);
+        dSpan.innerText = (size.z * CM_RATIO).toFixed(1);
+    }
+
     function createHandles() {
         const makeH = (id) => {
             const m = new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffcc00, depthTest: false }));
@@ -137,6 +159,7 @@
         };
         rotX_H = makeR(0xff0000, 'x'); rotY_H = makeR(0x00ff00, 'y'); rotZ_H = makeR(0x0000ff, 'z');
     }
+
     function createGroupGizmo() {
         groupGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1)), 0xff69b4);
         groupGizmo.visible = false; scene.add(groupGizmo);
@@ -152,11 +175,13 @@
         };
         groupRotHandles = [makeGR(0xff0000, 'x'), makeGR(0x00ff00, 'y'), makeGR(0x0000ff, 'z')];
     }
+
     function updateSelectionVisuals(selected) {
-        // 선택 하이라이트 방식 변경: 투명도 대신 색상 미세 조정이나 다른 방식을 고려할 수 있으나, 현재는 조작 핸들만 표시
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h => h.visible = false);
         groupGizmo.visible = false; document.getElementById('palette').style.display = 'none';
         currentSelection = selected;
+        updateRealTimeSize();
+
         if (selected.length === 0) { currentEgg = null; return; }
         document.getElementById('palette').style.display = 'grid';
         if (selected.length === 1) {
@@ -166,6 +191,7 @@
             updateGroupGizmoVisuals();
         }
     }
+
     function updateGroupGizmoVisuals() {
         if (currentSelection.length < 2) return;
         const box = new THREE.Box3();
@@ -177,21 +203,25 @@
         groupHandles.forEach((h, i) => h.position.copy(center).add(corners[i].clone().multiply(size)));
         groupRotHandles.forEach((r, i) => { r.position.copy(center); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2); });
     }
+
     function getMouseAngle(e, targetObj) {
         const rect = renderer.domElement.getBoundingClientRect();
         const sPos = targetObj.position.clone().project(camera);
         return Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
     }
+
     function onDown(e) {
         if (e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+        
         if (isPlacementMode && e.button === 0) {
             const hits = raycaster.intersectObject(scene.children.find(o => o.type === "GridHelper"));
             if (hits.length > 0) spawnEgg(hits[0].point);
             return;
         }
+
         const gizmoHits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if (gizmoHits.length > 0) {
             dragTarget = gizmoHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
@@ -217,11 +247,18 @@
             }
             return;
         }
+
         const eggHits = raycaster.intersectObjects(scene.children.filter(o => o.userData.isEgg));
         if (eggHits.length > 0) {
-            dragTarget = eggHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
-            if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
-            else if (!currentSelection.includes(dragTarget)) updateSelectionVisuals([...currentSelection, dragTarget]);
+            if (e.button === 2) { // 우클릭 시 정보 갱신 (이미 실시간이지만 명시적 기능으로 유지)
+                dragTarget = eggHits[0].object;
+                if (!currentSelection.includes(dragTarget)) updateSelectionVisuals([dragTarget]);
+                else updateSelectionVisuals(currentSelection);
+            } else {
+                dragTarget = eggHits[0].object; isDragging = true; mouseButton = e.button; controls.enabled = false;
+                if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
+                else if (!currentSelection.includes(dragTarget)) updateSelectionVisuals([...currentSelection, dragTarget]);
+            }
         } else {
             if (e.button === 0) { controls.enabled = true; updateSelectionVisuals([]); }
             else if (e.button === 2) {
@@ -231,18 +268,22 @@
             }
         }
     }
+
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+        
         if (isPlacementMode) {
             const hits = raycaster.intersectObject(scene.children.find(o => o.type === "GridHelper"));
             if (hits.length > 0) { ghostEgg.visible = true; ghostEgg.position.copy(hits[0].point).y += 10.01; }
         }
+
         if (isBoxSelecting) {
             const x = Math.min(boxStart.x, e.clientX), y = Math.min(boxStart.y, e.clientY), w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
             selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
         }
+
         if (!isDragging || !dragTarget) return;
         const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
@@ -290,8 +331,10 @@
                 }
                 updateGroupGizmoVisuals();
             }
+            updateRealTimeSize(); // 드래그 중 실시간 업데이트
         }
     }
+
     function onUp(e) { 
         if (isBoxSelecting) {
             isBoxSelecting = false; selectBoxEl.style.display = 'none';
@@ -308,6 +351,7 @@
         }
         if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; 
     }
+
     function createGhost() { ghostEgg = createEgg(0x28a745, true); ghostEgg.visible = false; scene.add(ghostEgg); }
     function captureState() {
         const state = scene.children.filter(o => o.userData.isEgg).map(e => ({ pos: {x: e.position.x, y: e.position.y, z: e.position.z}, rot: {x: e.quaternion.x, y: e.quaternion.y, z: e.quaternion.z, w: e.quaternion.w}, scale: {x: e.userData.data.scale.x, y: e.userData.data.scale.y, z: e.userData.data.scale.z}, offsets: e.userData.data.offsets.map(o => ({x: o.x, y: o.y, z: o.z})), col: e.material.color.getHex() }));
