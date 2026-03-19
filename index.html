@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.26.9 - Advanced Transform</title>
+    <title>Build-A-Crochet v5.27.1</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -25,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.26.9</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.27.1</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -73,8 +73,10 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        window.addEventListener('keydown', (e) => { if(e.key === 'Control') isCtrlPressed = true; });
-        window.addEventListener('keyup', (e) => { if(e.key === 'Control') isCtrlPressed = false; });
+        
+        // 키보드 이벤트 리스너 추가 (Ctrl 감지)
+        window.addEventListener('keydown', (e) => { if(e.ctrlKey || e.key === 'Control') isCtrlPressed = true; });
+        window.addEventListener('keyup', (e) => { if(!e.ctrlKey && e.key === 'Control') isCtrlPressed = false; });
         
         captureState();
         animate();
@@ -173,6 +175,22 @@
     }
 
     function onMove(e) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
+
+        // 💡 1번 오류 해결: 배치 모드일 때 Ghost Egg가 마우스를 따라가도록 수정
+        if (isPlacementMode) {
+            let intersect = new THREE.Vector3(); 
+            if (raycaster.ray.intersectPlane(groundPlane, intersect)) { 
+                ghostEgg.position.copy(intersect).y += 10; 
+                ghostEgg.visible = true; 
+            } else {
+                ghostEgg.visible = false;
+            }
+            return; 
+        }
+
         if (isBoxSelecting) {
             const x = Math.min(boxStart.x, e.clientX); const y = Math.min(boxStart.y, e.clientY);
             const w = Math.abs(e.clientX - boxStart.x); const h = Math.abs(e.clientY - boxStart.y);
@@ -182,10 +200,6 @@
         }
 
         if (!dragTarget || !isDragging) return;
-
-        const rect = renderer.domElement.getBoundingClientRect();
-        const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-        const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
         const camNormal = camera.getWorldDirection(new THREE.Vector3()).negate();
         const plane = new THREE.Plane(camNormal, -dragTarget.getWorldPosition(new THREE.Vector3()).dot(camNormal));
@@ -202,11 +216,10 @@
                 const localDiff = intersect.sub(dragTarget.getWorldPosition(new THREE.Vector3())).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const id = dragTarget.userData.id, data = currentEgg.userData.data;
                 
-                // 💡 변형 로직: Ctrl 여부와 마우스 버튼에 따른 분기
+                // 💡 2번 오류 해결: useFreeForm 판별 시 isCtrlPressed 감지 강화
                 const useFreeForm = (mouseButton === 2 || (mouseButton === 0 && isCtrlPressed));
 
                 if (useFreeForm) {
-                    // 자유 변형 (한 방향만)
                     if (id < 2) { 
                         const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds);
                         currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion));
@@ -218,16 +231,12 @@
                         currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion));
                     }
                 } else {
-                    // 전체 비례 변형 (유지하고자 하는 신규 기능)
                     let ds = 0;
                     if (id < 2) ds = (localDiff.y * (id === 0 ? 1 : -1) / BASE_H) * SENSITIVITY;
                     else if (id < 4) ds = (localDiff.x * (id === 3 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
                     else ds = (localDiff.z * (id === 4 ? 1 : -1) / (BASE_R * 2)) * SENSITIVITY;
-                    
                     data.scale.setScalar(Math.max(0.1, startScale.y + ds));
-                    const moveDir = id < 2 ? new THREE.Vector3(0, (id === 0 ? 1 : -1), 0) : 
-                                    (id < 4 ? new THREE.Vector3((id === 3 ? 1 : -1), 0, 0) : 
-                                              new THREE.Vector3(0, 0, (id === 4 ? 1 : -1)));
+                    const moveDir = id < 2 ? new THREE.Vector3(0, (id === 0 ? 1 : -1), 0) : (id < 4 ? new THREE.Vector3((id === 3 ? 1 : -1), 0, 0) : new THREE.Vector3(0, 0, (id === 4 ? 1 : -1)));
                     const moveDist = id < 2 ? (data.scale.y - startScale.y) * BASE_H / 2 : (data.scale.x - startScale.x) * BASE_R;
                     currentEgg.position.copy(startPos).add(moveDir.applyQuaternion(currentEgg.quaternion).multiplyScalar(moveDist));
                 }
