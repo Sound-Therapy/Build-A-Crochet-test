@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.29.0 - Box Select</title>
+    <title>Build-A-Crochet v5.29.1 - Precision Controls</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 80px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; }
@@ -14,7 +14,6 @@
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); padding: 10px; border-radius: 12px; display: none; grid-template-columns: repeat(2, 1fr); gap: 5px; border: 1px solid #ccc; z-index: 200; }
         .color-dot { width: 25px; height: 25px; border-radius: 50%; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
-        /* ⭐ 박스 선택 UI 스타일 */
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
@@ -26,7 +25,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.29.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.29.1</div>
     <div id="palette">
         <div class="color-dot" style="background: #ff69b4;" onclick="updateColor('#ff69b4')"></div>
         <div class="color-dot" style="background: #ffffff;" onclick="updateColor('#ffffff')"></div>
@@ -43,7 +42,6 @@
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let startScale, startPos, startRotation, mouseButton;
-    // ⭐ 박스 선택 관련 변수
     let isBoxSelecting = false, boxStart = new THREE.Vector2(), currentSelection = [];
     let selectBoxEl = document.getElementById('select-box');
     
@@ -60,11 +58,15 @@
         renderer.setSize(window.innerWidth - 80, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
         renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         scene.add(new THREE.AmbientLight(0xffffff, 1.2));
         const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 10); scene.add(dirLight);
+        
         controls = new THREE.OrbitControls(camera, renderer.domElement);
+        // ⭐ 그리드 좌클릭은 View 전환, 우클릭은 Orbit에서 제외하여 박스 선택에 할당
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+        
         createHandles(); createGhost();
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
@@ -123,20 +125,11 @@
         rotX_H = makeR(0xff0000); rotY_H = makeR(0x00ff00); rotZ_H = makeR(0x0000ff);
     }
 
-    // ⭐ 다중 선택 시 시각적 효과 처리
     function updateSelectionVisuals(selectedEggs) {
-        // 기존 선택 해제 (아웃라인 두께 원복)
         scene.children.filter(o => o.userData.isEgg).forEach(e => e.userData.outline.scale.set(1.02,1.02,1.02));
         currentSelection = selectedEggs;
-        
-        if (selectedEggs.length === 0) {
-            deselectAllHandles(); return;
-        }
-        
-        // 다중 선택된 에그들 아웃라인 강조
+        if (selectedEggs.length === 0) { deselectAllHandles(); return; }
         selectedEggs.forEach(e => e.userData.outline.scale.set(1.08, 1.08, 1.08));
-
-        // 핸들은 첫 번째 선택된 에그에만 표시 (변형용 pivot)
         currentEgg = selectedEggs[0];
         [...handles, rotX_H, rotY_H, rotZ_H].forEach(h => h.visible = true);
         document.getElementById('palette').style.display = 'grid';
@@ -150,7 +143,7 @@
     }
 
     function onDown(e) {
-        if (e.target.tagName !== 'CANVAS') return; // UI 클릭 시 무시
+        if (e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
@@ -160,12 +153,12 @@
         }
 
         const hits = raycaster.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...scene.children.filter(o => o.userData.isEgg)]);
+        
         if (hits.length > 0) {
-            dragTarget = hits[0].object; controls.enabled = false; isDragging = true; mouseButton = e.button;
+            dragTarget = hits[0].object; isDragging = true; mouseButton = e.button;
+            controls.enabled = false; // 에그/핸들 조작 시 뷰 전환 중단
             if(dragTarget.userData.isEgg) {
-                // 단일 선택
                 if (!e.ctrlKey) updateSelectionVisuals([dragTarget]);
-                // Ctrl + 좌클릭으로 추가 선택 (다중 선택 상태 유지)
                 else if (e.ctrlKey && e.button === 0 && !currentSelection.includes(dragTarget)) {
                     currentSelection.push(dragTarget); updateSelectionVisuals(currentSelection);
                 }
@@ -175,29 +168,29 @@
             if(dragTarget.userData.isHandle) { startScale = currentEgg.userData.data.scale.clone(); }
             const sPos = dragTarget.position.clone().project(camera);
             startMouseAngle = Math.atan2(e.clientY - (rect.top + (1 - sPos.y) * rect.height / 2), e.clientX - (rect.left + (1 + sPos.x) * rect.width / 2));
-        } else if (e.button === 0 && !e.ctrlKey) {
-            // ⭐ 빈 공간 클릭 시 박스 선택 시작
-            isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
-            selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
-            deselectAllHandles();
+        } else {
+            // ⭐ 빈 공간 클릭 시 분기
+            if (e.button === 0) {
+                // 좌클릭: 뷰 전환 허용 및 핸들 숨기기
+                controls.enabled = true;
+                deselectAllHandles();
+            } else if (e.button === 2) {
+                // 우클릭: 사각형 활성화 (박스 선택)
+                isBoxSelecting = true; boxStart.set(e.clientX, e.clientY);
+                selectBoxEl.style.display = 'block'; selectBoxEl.style.width = '0px'; selectBoxEl.style.height = '0px';
+                controls.enabled = false;
+            }
         }
     }
 
     function onMove(e) {
-        const rect = renderer.domElement.getBoundingClientRect();
         if (isBoxSelecting) {
-            // ⭐ 박스 선택 시 UI 갱신
             const x = Math.min(boxStart.x, e.clientX), y = Math.min(boxStart.y, e.clientY);
             const w = Math.abs(e.clientX - boxStart.x), h = Math.abs(e.clientY - boxStart.y);
             selectBoxEl.style.left = x + 'px'; selectBoxEl.style.top = y + 'px'; selectBoxEl.style.width = w + 'px'; selectBoxEl.style.height = h + 'px'; return;
         }
-        if (isPlacementMode) {
-            const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
-            const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
-            let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(groundPlane, intersect)) { ghostEgg.position.copy(intersect).y += 10; ghostEgg.visible = true; }
-            return;
-        }
         if (!dragTarget || !currentEgg) return;
+        const rect = renderer.domElement.getBoundingClientRect();
         const mouse = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
         const raycaster = new THREE.Raycaster(); raycaster.setFromCamera(mouse, camera);
 
@@ -209,12 +202,8 @@
         } else if (dragTarget.userData.isEgg) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -startPos.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             let intersect = new THREE.Vector3(); if (raycaster.ray.intersectPlane(plane, intersect)) {
-                // 다중 이동 (Ctrl 안 누르고 드래그 시)
-                if(!e.ctrlKey || mouseButton !== 0) {
-                    const diff = intersect.sub(currentEgg.position); currentSelection.forEach(e => e.position.add(diff));
-                } else { // Ctrl + 좌클릭 자유 변형 중 이동 방지
-                    currentEgg.position.copy(intersect);
-                }
+                if(!e.ctrlKey || mouseButton !== 0) { const diff = intersect.sub(currentEgg.position); currentSelection.forEach(e => e.position.add(diff)); }
+                else { currentEgg.position.copy(intersect); }
             }
         } else if (dragTarget.userData.isHandle) {
             const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
@@ -222,18 +211,17 @@
             if (raycaster.ray.intersectPlane(plane, intersect)) {
                 const localDiff = intersect.sub(dragTarget.position).applyQuaternion(currentEgg.quaternion.clone().invert());
                 const data = currentEgg.userData.data, id = dragTarget.userData.id;
-                // ⭐ Trinitiy Logic 유지
-                if (mouseButton === 0 && !e.ctrlKey) {
+                
+                if (mouseButton === 0 && !e.ctrlKey) { // 좌클릭: 전체 비례
                     const dir = (id === 0 || id === 3 || id === 4) ? 1 : -1;
                     const ds = (id < 2 ? localDiff.y : (id < 4 ? localDiff.x : localDiff.z)) * dir / (id < 2 ? BASE_H : BASE_R * 2) * SENSITIVITY;
                     data.scale.addScalar(ds); data.scale.x = Math.max(0.1, data.scale.x); data.scale.y = Math.max(0.1, data.scale.y); data.scale.z = Math.max(0.1, data.scale.z);
-                    const moveDist = (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0));
-                    currentEgg.position.copy(startPos).add(new THREE.Vector3(0, moveDist, 0).applyQuaternion(currentEgg.quaternion));
-                } else if (mouseButton === 2) {
-                    if (id < 2) { const dir = id === 0 ? 1 : -1; const ds = (localDiff.y * dir / BASE_H) * SENSITIVITY; data.scale.y = Math.max(0.1, startScale.y + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
-                    else if (id < 4) { const dir = id === 3 ? 1 : -1; const ds = (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.x = Math.max(0.1, startScale.x + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
-                    else { const dir = id === 4 ? 1 : -1; const ds = (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY; data.scale.z = Math.max(0.1, startScale.z + ds); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
-                } else if (mouseButton === 0 && e.ctrlKey) {
+                    currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * (id === 0 ? 1 : (id === 1 ? -1 : 0)), 0).applyQuaternion(currentEgg.quaternion));
+                } else if (mouseButton === 2) { // 우클릭: 한 방향
+                    if (id < 2) { const dir = id === 0 ? 1 : -1; data.scale.y = Math.max(0.1, startScale.y + (localDiff.y * dir / BASE_H) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, (data.scale.y - startScale.y) * BASE_H / 2 * dir, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else if (id < 4) { const dir = id === 3 ? 1 : -1; data.scale.x = Math.max(0.1, startScale.x + (localDiff.x * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3((data.scale.x - startScale.x) * BASE_R * dir, 0, 0).applyQuaternion(currentEgg.quaternion)); }
+                    else { const dir = id === 4 ? 1 : -1; data.scale.z = Math.max(0.1, startScale.z + (localDiff.z * dir / (BASE_R * 2)) * SENSITIVITY); currentEgg.position.copy(startPos).add(new THREE.Vector3(0, 0, (data.scale.z - startScale.z) * BASE_R * dir).applyQuaternion(currentEgg.quaternion)); }
+                } else if (mouseButton === 0 && e.ctrlKey) { // Ctrl+좌: 자유 변형
                     data.offsets[id].add(localDiff);
                 }
                 updateMesh(currentEgg);
@@ -243,21 +231,20 @@
 
     function onUp(e) {
         if (isBoxSelecting) {
-            // ⭐ 박스 선택 완료 및 객체 판별
             isBoxSelecting = false; selectBoxEl.style.display = 'none';
             const rect = renderer.domElement.getBoundingClientRect();
             const minX = Math.min(boxStart.x, e.clientX), minY = Math.min(boxStart.y, e.clientY);
             const maxX = Math.max(boxStart.x, e.clientX), maxY = Math.max(boxStart.y, e.clientY);
-            if(Math.abs(maxX-minX) < 5 && Math.abs(maxY-minY) < 5) return; // 너무 작으면 클릭으로 간주
-
-            const eggs = scene.children.filter(o => o.userData.isEgg);
-            const selected = eggs.filter(egg => {
-                const screenPos = egg.position.clone().project(camera);
-                const x = (screenPos.x + 1) * rect.width / 2 + rect.left;
-                const y = (1 - screenPos.y) * rect.height / 2 + rect.top;
-                return (x >= minX && x <= maxX && y >= minY && y <= maxY);
-            });
-            updateSelectionVisuals(selected);
+            if(Math.abs(maxX-minX) > 5) {
+                const eggs = scene.children.filter(o => o.userData.isEgg);
+                const selected = eggs.filter(egg => {
+                    const screenPos = egg.position.clone().project(camera);
+                    const x = (screenPos.x + 1) * rect.width / 2 + rect.left;
+                    const y = (1 - screenPos.y) * rect.height / 2 + rect.top;
+                    return (x >= minX && x <= maxX && y >= minY && y <= maxY);
+                });
+                updateSelectionVisuals(selected);
+            }
         }
         if (isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true;
     }
