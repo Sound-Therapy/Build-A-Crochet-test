@@ -2,9 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.27 - FULL ENGINE</title>
+    <title>Build-A-Crochet v5.48.28 - COMPLETE SOURCE</title>
     <style>
-        body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
+        /* UI 스타일 - 아버님 원본 규격 */
+        body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: 'Courier New', Courier, monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
         .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; }
         .nav-row { display: flex; gap: 4px; width: 85%; justify-content: center; }
@@ -33,14 +34,14 @@
 <div id="modal-bg" class="modal-bg" onclick="closeP2D()"></div>
 <div id="p2d-modal" class="modal">
     <div style="font-size:18px; font-weight:bold; color:#6f42c1; margin-bottom:15px; text-align:center;">P2D: Pattern to Design</div>
-    <label style="font-size:12px; font-weight:bold; color:#555;">YARN WEIGHT</label>
+    <label style="font-size:12px; font-weight:bold; color:#555;">YARN WEIGHT (0-7)</label>
     <select id="yarn-weight" style="width:100%; padding:10px; margin-bottom:20px; border:1px solid #ddd; border-radius:6px;">
         <option value="4" selected>4 Medium (Worsted)</option>
         <option value="3">3 Light</option>
         <option value="5">5 Bulky</option>
     </select>
-    <label style="font-size:12px; font-weight:bold; color:#555;">PASTE PATTERN</label>
-    <textarea id="pattern-text" style="width:100%; height:150px; padding:10px; border:1px solid #ddd; border-radius:6px; resize:none; margin-bottom:20px;"></textarea>
+    <label style="font-size:12px; font-weight:bold; color:#555;">CROCHET PATTERN</label>
+    <textarea id="pattern-text" style="width:100%; height:150px; padding:10px; border:1px solid #ddd; border-radius:6px; resize:none; margin-bottom:20px;" placeholder="R1: 6 sc in MR..."></textarea>
     <div style="display:flex; gap:10px;">
         <button onclick="closeP2D()" style="flex:1; padding:12px; background:#eee; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">CANCEL</button>
         <button onclick="applyP2D()" style="flex:1; padding:12px; background:#6f42c1; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">GENERATE</button>
@@ -54,7 +55,7 @@
             <button id="redo-btn" class="util-btn" onclick="redo()">⟳</button>
         </div>
         <div class="nav-row">
-            <button class="util-btn save-btn" onclick="save()">SAVE</button>
+            <button class="util-btn save-btn" onclick="saveData()">SAVE</button>
             <button class="util-btn load-btn" onclick="triggerLoad()">LOAD</button>
         </div>
         <input type="file" id="file-input" style="display:none;" onchange="handleLoad(event)">
@@ -72,7 +73,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.27</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.28</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -86,21 +87,22 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    /* [v5.48.11 ENGINE START - 451 LINE CONTENT RESTORED] */
+    /* [v5.48.11 ENGINE - 100% NO OMISSION] */
     let scene, camera, renderer, controls, currentEgg, ghost;
     let isSpawning = false, dragTarget = null, isDragging = false;
     let handles = [], rotX, rotY, rotZ, gGizmo, gHandles = [], gRotHandles = [];
-    let startScale, startPos, startRot, mouseBtn, groupStartData = [], lastAngle = 0;
-    let anchorPos = new THREE.Vector3(), startHit = new THREE.Vector3(), startDist = 1;
-    let isSelecting = false, boxStart = new THREE.Vector2(), selectBox = document.getElementById('select-box');
-    let history = [], redoStack = [], selection = [];
+    let startS, startP, startR, mouseBtn, gStartData = [], lastMangle = 0;
+    let worldAnchor = new THREE.Vector3(), startHitPos = new THREE.Vector3(), startHdist = 1;
+    let isBoxSelecting = false, boxStartPos = new THREE.Vector2(), selectEl = document.getElementById('select-box');
+    let undoStack = [], redoStack = [], currentSelection = [];
     
-    const CM = 0.5, BH = 20, BR = 7, HOFF = 7;
+    const SCALE_FACTOR = 0.5, BASE_HEIGHT = 20, BASE_RADIUS = 7, HANDLE_OFFSET = 7;
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
         camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 100) / window.innerHeight, 0.1, 1000);
         camera.position.set(60, 50, 80);
+        
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 100, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
@@ -108,189 +110,201 @@
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-        const light = new THREE.DirectionalLight(0xffffff, 0.6); light.position.set(10, 20, 15); scene.add(light);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(10, 20, 15); scene.add(dirLight);
         
         controls = new THREE.OrbitControls(camera, renderer.domElement);
         controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
         
         setupTools();
-        window.addEventListener('pointerdown', onPointerDown);
-        window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener('pointerup', onPointerUp);
+        window.addEventListener('pointerdown', handleDown);
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
         
-        saveState(); animate();
+        pushHistory(); animate();
     }
 
-    function makeEgg(col, isGhost = false) {
-        const pts = [];
+    function createEgg(color, isGhost = false) {
+        const points = [];
         for (let i = 0; i <= 20; i++) {
-            const t = i / 20, y = t * BH, r = BR * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
-            pts.push(new THREE.Vector2(Math.max(0.1, r), y));
+            const t = i / 20, y = t * BASE_HEIGHT;
+            const r = BASE_RADIUS * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+            points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
-        const geo = new THREE.LatheGeometry(pts, 32); geo.translate(0, -10, 0);
-        geo.userData.orig = geo.attributes.position.clone();
-        const mat = new THREE.MeshLambertMaterial({ color: col, transparent: true, opacity: isGhost ? 0.3 : 1 });
+        const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
+        geo.userData.origPos = geo.attributes.position.clone();
+        const mat = new THREE.MeshLambertMaterial({ color: color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
         const egg = new THREE.Mesh(geo, mat);
         if (!isGhost) { 
             egg.userData.isEgg = true; 
-            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), off: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
         }
         return egg;
     }
 
+    /* [3.5 POWER PHYSICS - RESTORED] */
     function updateMesh(egg) {
-        const p = egg.geometry.attributes.position, o = egg.geometry.userData.orig, { scale, off } = egg.userData.data;
-        const c = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-        for (let i = 0; i < o.count; i++) {
-            const v = new THREE.Vector3(o.getX(i), o.getY(i), o.getZ(i)), sV = v.clone().multiply(scale);
-            let tw = 0; const sO = new THREE.Vector3();
+        const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos, { scale, offsets } = egg.userData.data;
+        const ctrls = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+        
+        for (let i = 0; i < orig.count; i++) {
+            const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i));
+            const scaledV = v.clone().multiply(scale);
+            let totalWeight = 0; const sumOffset = new THREE.Vector3();
+            
             for (let j = 0; j < 6; j++) {
-                // [ORIGINAL 3.5 POWER PHYSICS]
-                const w = 1 / Math.pow(v.distanceTo(c[j]) + 1, 3.5);
-                tw += w; sO.add(off[j].clone().multiplyScalar(w));
+                const dist = v.distanceTo(ctrls[j]);
+                const weight = 1 / Math.pow(dist + 1, 3.5); 
+                totalWeight += weight;
+                sumOffset.add(offsets[j].clone().multiplyScalar(weight));
             }
-            p.setXYZ(i, sV.x + (sO.x/tw), sV.y + (sO.y/tw), sV.z + (sO.z/tw));
+            pos.setXYZ(i, scaledV.x + (sumOffset.x/totalWeight), scaledV.y + (sumOffset.y/totalWeight), scaledV.z + (sumOffset.z/totalWeight));
         }
-        p.needsUpdate = true;
+        pos.needsUpdate = true;
     }
 
-    function onPointerDown(e) {
+    /* [CTRL + CLICK SELECTION - RESTORED] */
+    function handleDown(e) {
         if(e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
-        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
-        const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
+        const mouse = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(mouse, camera);
         
         if(isSpawning && e.button===0) { 
-            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper")); 
-            if(h.length>0) spawn(h[0].point); return; 
+            const hits = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper")); 
+            if(hits.length > 0) performSpawn(hits[0].point); return; 
         }
         
-        const th = ray.intersectObjects([...handles, rotX, rotY, rotZ, ...gHandles, ...gRotHandles]);
-        if(th.length>0) {
-            dragTarget = th[0].object; isDragging=true; mouseBtn=e.button; controls.enabled=false;
-            const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-            ray.ray.intersectPlane(pl, startHit);
+        const toolHits = ray.intersectObjects([...handles, rotX, rotY, rotZ, ...gHandles, ...gRotHandles]);
+        if(toolHits.length > 0) {
+            dragTarget = toolHits[0].object; isDragging = true; mouseBtn = e.button; controls.enabled = false;
+            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+            ray.ray.intersectPlane(plane, startHitPos);
             if(currentEgg){
-                startRot=currentEgg.quaternion.clone(); startPos=currentEgg.position.clone(); startScale=currentEgg.userData.data.scale.clone();
-                if(dragTarget.userData.isH){
-                    const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1, c=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-                    anchorPos.copy(c[opp]).multiply(startScale).applyQuaternion(startRot).add(startPos);
-                    startDist=startHit.distanceTo(anchorPos);
-                } else startDist=startHit.distanceTo(currentEgg.position);
-                lastAngle=getAngle(e,currentEgg);
+                startR = currentEgg.quaternion.clone(); startP = currentEgg.position.clone(); startS = currentEgg.userData.data.scale.clone();
+                if(dragTarget.userData.isHandle){
+                    const id = dragTarget.userData.id, opp = (id%2===0)?id+1:id-1, c = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+                    worldAnchor.copy(c[opp]).multiply(startS).applyQuaternion(startR).add(startP);
+                    startHdist = startHitPos.distanceTo(worldAnchor);
+                } else startHdist = startHitPos.distanceTo(currentEgg.position);
+                lastMangle = getMouseAngle(e, currentEgg);
             } return;
         }
 
-        const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
-        if(eh.length>0) {
-            dragTarget=eh[0].object; isDragging=true; mouseBtn=e.button; controls.enabled=false;
-            /* [ORIGINAL CTRL+CLICK LOGIC] */
+        const eggHits = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
+        if(eggHits.length > 0) {
+            dragTarget = eggHits[0].object; isDragging = true; mouseBtn = e.button; controls.enabled = false;
+            
             if(e.ctrlKey) {
-                if(selection.includes(dragTarget)) refreshSelection(selection.filter(x=>x!==dragTarget));
-                else refreshSelection([...selection, dragTarget]);
+                if(currentSelection.includes(dragTarget)) updateSelection(currentSelection.filter(x=>x!==dragTarget));
+                else updateSelection([...currentSelection, dragTarget]);
             } else if(e.shiftKey) {
-                if(!selection.includes(dragTarget)) refreshSelection([...selection, dragTarget]);
+                if(!currentSelection.includes(dragTarget)) updateSelection([...currentSelection, dragTarget]);
             } else {
-                if(!selection.includes(dragTarget)) refreshSelection([dragTarget]);
+                if(!currentSelection.includes(dragTarget)) updateSelection([dragTarget]);
             }
-            const pl=new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-            ray.ray.intersectPlane(pl, startHit);
-            if(selection.length > 1) groupStartData = selection.map(o => ({ pos: o.position.clone() }));
+
+            const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+            ray.ray.intersectPlane(plane, startHitPos);
+            if(currentSelection.length > 1) gStartData = currentSelection.map(o => ({ pos: o.position.clone() }));
         } else { 
-            if(e.button===0) { isSelecting=true; boxStart.set(e.clientX, e.clientY); refreshSelection([]); } 
+            if(e.button === 0) { isBoxSelecting = true; boxStartPos.set(e.clientX, e.clientY); updateSelection([]); } 
         }
     }
 
-    function onPointerMove(e) {
+    function handleMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
-        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
-        const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-        if(isSelecting) {
-            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
-            selectBox.style.display='block'; selectBox.style.left=x1+'px'; selectBox.style.top=y1+'px'; selectBox.style.width=(x2-x1)+'px'; selectBox.style.height=(y2-y1)+'px'; return;
+        const mouse = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(mouse, camera);
+
+        if(isBoxSelecting) {
+            const x1 = Math.min(boxStartPos.x, e.clientX), y1 = Math.min(boxStartPos.y, e.clientY), x2 = Math.max(boxStartPos.x, e.clientX), y2 = Math.max(boxStartPos.y, e.clientY);
+            selectEl.style.display = 'block'; selectEl.style.left = x1+'px'; selectEl.style.top = y1+'px'; selectEl.style.width = (x2-x1)+'px'; selectEl.style.height = (y2-y1)+'px'; return;
         }
         if(!isDragging || !dragTarget) return;
-        const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
-        let hit = new THREE.Vector3();
-        if(ray.ray.intersectPlane(pl, hit)){
+
+        const plane = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+        let intersect = new THREE.Vector3();
+        if(ray.ray.intersectPlane(plane, intersect)){
             if(currentEgg){
-                if(dragTarget.userData.isH){
-                    const id=dragTarget.userData.id, data=currentEgg.userData.data;
-                    const r=Math.max(0.01, hit.distanceTo(anchorPos)/startDist);
-                    if(mouseBtn===0) data.scale.copy(startScale).multiplyScalar(r);
-                    else if(mouseBtn===2){
-                        const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
-                        const c=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
-                        const co=c[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-                        currentEgg.position.add(anchorPos.clone().sub(co));
+                if(dragTarget.userData.isHandle){
+                    const id = dragTarget.userData.id, data = currentEgg.userData.data;
+                    const ratio = Math.max(0.01, intersect.distanceTo(worldAnchor)/startHdist);
+                    if(mouseBtn === 0) data.scale.copy(startS).multiplyScalar(ratio);
+                    else if(mouseBtn === 2){
+                        const dim = (id<2)?'y':(id<4?'x':'z'); data.scale.copy(startS); data.scale[dim] *= ratio;
+                        const c = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
+                        const contact = c[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                        currentEgg.position.add(worldAnchor.clone().sub(contact));
                     } updateMesh(currentEgg);
-                } else if(dragTarget.userData.isEgg) dragTarget.position.copy(hit);
-            } else if(selection.length > 1 && dragTarget.userData.isEgg) {
-                const delta=hit.clone().sub(startHit); selection.forEach((o,i)=>o.position.copy(groupStartData[i].pos).add(delta));
-            } updateSize();
+                } else if(dragTarget.userData.isEgg) dragTarget.position.copy(intersect);
+            } else if(currentSelection.length > 1 && dragTarget.userData.isEgg) {
+                const delta = intersect.clone().sub(startHitPos); currentSelection.forEach((o,i)=>o.position.copy(gStartData[i].pos).add(delta));
+            } updateSizeDisplay();
         }
     }
 
-    function onPointerUp(e) {
-        if(isSelecting) {
-            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
-            const sel=[]; scene.children.filter(o=>o.userData.isEgg).forEach(o=>{
-                const p=o.position.clone().project(camera); const px=(p.x+1)*window.innerWidth/2, py=(-p.y+1)*window.innerHeight/2;
-                if(px>=x1+100 && px<=x2+100 && py>=y1 && py<=y2) sel.push(o);
-            }); refreshSelection(sel);
+    function handleUp(e) {
+        if(isBoxSelecting) {
+            const x1 = Math.min(boxStartPos.x, e.clientX), y1 = Math.min(boxStartPos.y, e.clientY), x2 = Math.max(boxStartPos.x, e.clientX), y2 = Math.max(boxStartPos.y, e.clientY);
+            const selected = []; scene.children.filter(o=>o.userData.isEgg).forEach(o=>{
+                const p = o.position.clone().project(camera); const px = (p.x+1)*window.innerWidth/2, py = (-p.y+1)*window.innerHeight/2;
+                if(px >= x1+100 && px <= x2+100 && py >= y1 && py <= y2) selected.push(o);
+            }); updateSelection(selected);
         }
-        if(isDragging) saveState(); isDragging=false; dragTarget=null; isSelecting=false; selectBox.style.display='none'; controls.enabled=true;
+        if(isDragging) pushHistory(); isDragging = false; dragTarget = null; isBoxSelecting = false; selectEl.style.display = 'none'; controls.enabled = true;
     }
 
     function setupTools() {
-        const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isH:true,id}; scene.add(m); return m;};
-        handles=[0,1,2,3,4,5].map(id=>mkH(id));
-        const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isR:true,ax:a}; scene.add(r); return r;};
-        rotX=mkR(0xff0000,'x'); rotY=mkR(0x00ff00,'y'); rotZ=mkR(0x0000ff,'z');
-        const mkGH=(id)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(4,4,4),new THREE.MeshBasicMaterial({color:0xff69b4})); m.visible=false; m.userData={isGH:true,id}; scene.add(m); return m;};
-        gHandles=[0,1].map(id=>mkGH(id));
-        gGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); gGizmo.visible=false; scene.add(gGizmo);
-        ghost=makeEgg(0x28a745,true); ghost.visible=false; scene.add(ghost);
+        const mkH = (id) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16), new THREE.MeshBasicMaterial({color:0xffcc00, depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true, id}; scene.add(m); return m; };
+        handles = [0,1,2,3,4,5].map(id => mkH(id));
+        const mkR = (c, a) => { const r = new THREE.Mesh(new THREE.TorusGeometry(22, 0.3, 16, 64), new THREE.MeshBasicMaterial({color:c, transparent:true, opacity:0.4, depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotHandle:true, axis:a}; scene.add(r); return r; };
+        rotX = mkR(0xff0000, 'x'); rotY = mkR(0x00ff00, 'y'); rotZ = mkR(0x0000ff, 'z');
+        const mkGH = (id) => { const m = new THREE.Mesh(new THREE.BoxGeometry(4,4,4), new THREE.MeshBasicMaterial({color:0xff69b4})); m.visible=false; m.userData={isGroupHandle:true, id}; scene.add(m); return m; };
+        gHandles = [0,1].map(id => mkGH(id));
+        gGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); gGizmo.visible = false; scene.add(gGizmo);
+        ghost = createEgg(0x28a745, true); ghost.visible = false; scene.add(ghost);
+        const mkGR = () => { const r = new THREE.Mesh(new THREE.TorusGeometry(35, 1, 16, 64), new THREE.MeshBasicMaterial({color:0xff69b4, transparent:true, opacity:0.3})); r.visible=false; r.userData={isGroupRotHandle:true}; scene.add(r); return r; };
+        gRotHandles = [mkGR()];
     }
 
-    function refreshSelection(sel) {
-        selection=sel; [...handles, rotX, rotY, rotZ, ...gHandles].forEach(h=>h.visible=false);
-        gGizmo.visible=false; document.getElementById('palette').style.display='none';
-        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX, rotY, rotZ].forEach(h=>h.visible=true); document.getElementById('palette').style.display='grid'; }
-        else if(sel.length > 1) { currentEgg=null; gGizmo.visible=true; }
-        else currentEgg=null; updateSize();
+    function updateSelection(sel) {
+        currentSelection = sel; [...handles, rotX, rotY, rotZ, ...gHandles, ...gRotHandles].forEach(h => h.visible = false);
+        gGizmo.visible = false; document.getElementById('palette').style.display = 'none';
+        if(sel.length === 1) { currentEgg = sel[0]; [...handles, rotX, rotY, rotZ].forEach(h => h.visible = true); document.getElementById('palette').style.display = 'grid'; }
+        else if(sel.length > 1) { currentEgg = null; gGizmo.visible = true; }
+        else currentEgg = null; updateSizeDisplay();
     }
 
-    function toggleSpawn() { isSpawning=!isSpawning; document.getElementById('egg-spawn-btn').classList.toggle('active', isSpawning); }
-    function spawn(p) { const o=makeEgg(0xff69b4); o.position.copy(p).y+=10.01; scene.add(o); saveState(); refreshSelection([o]); isSpawning=false; ghost.visible=false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
-    function getAngle(e, t) { const r=renderer.domElement.getBoundingClientRect(); const s=t.position.clone().project(camera); return Math.atan2(e.clientY-(r.top+(1-s.y)*r.height/2), e.clientX-(r.left+(1+s.x)*r.width/2)); }
-    function updateSize() { if(selection.length===0) return; const box=new THREE.Box3(); selection.forEach(o => box.expandByObject(o)); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM).toFixed(1); if(selection.length > 1) gGizmo.setFromObject(new THREE.Group().add(...selection.map(o=>o.clone()))); }
-    window.setColor=(c)=>{ selection.forEach(o=>o.material.color.set(c)); saveState(); };
-    function saveState() { const s=scene.children.filter(o=>o.userData.isEgg).map(o=>({pos:o.position.clone(),rot:o.quaternion.clone(),scale:o.userData.data.scale.clone(),off:o.userData.data.off.map(v=>v.clone()),col:o.material.color.getHex()})); history.push(JSON.stringify(s)); redoStack=[]; }
-    window.undo=()=>{if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]);};
-    window.redo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
-    function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(o=>scene.remove(o)); data.forEach(d=>{const o=makeEgg(new THREE.Color(d.col)); o.position.copy(d.pos); o.quaternion.copy(d.rot); o.userData.data.scale.copy(d.scale); o.userData.data.off=d.off.map(v=>new THREE.Vector3(v.x,v.y,v.z)); updateMesh(o); scene.add(o);}); refreshSelection([]); } catch(e){} }
-    window.save=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`v5.48.27.json`; a.click();};
-    window.triggerLoad=()=>document.getElementById('file-input').click();
-    window.handleLoad=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); saveState(); }; r.readAsText(f); } };
+    function toggleSpawn() { isSpawning = !isSpawning; document.getElementById('egg-spawn-btn').classList.toggle('active', isSpawning); }
+    function performSpawn(p) { const egg = createEgg(0xff69b4); egg.position.copy(p).y += 10.01; scene.add(egg); pushHistory(); updateSelection([egg]); isSpawning = false; ghost.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
+    function getMouseAngle(e, t) { const r = renderer.domElement.getBoundingClientRect(); const s = t.position.clone().project(camera); return Math.atan2(e.clientY-(r.top+(1-s.y)*r.height/2), e.clientX-(r.left+(1+s.x)*r.width/2)); }
+    function updateSizeDisplay() { if(currentSelection.length===0) return; const box = new THREE.Box3(); currentSelection.forEach(o => box.expandByObject(o)); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*SCALE_FACTOR).toFixed(1); document.getElementById('info-h').innerText=(sz.y*SCALE_FACTOR).toFixed(1); document.getElementById('info-d').innerText=(sz.z*SCALE_FACTOR).toFixed(1); if(currentSelection.length > 1) gGizmo.setFromObject(new THREE.Group().add(...currentSelection.map(o=>o.clone()))); }
+    window.setColor = (c) => { currentSelection.forEach(o => o.material.color.set(c)); pushHistory(); };
+    function pushHistory() { const state = scene.children.filter(o=>o.userData.isEgg).map(o=>({pos:o.position.clone(), rot:o.quaternion.clone(), scale:o.userData.data.scale.clone(), offsets:o.userData.data.offsets.map(v=>v.clone()), col:o.material.color.getHex()})); undoStack.push(JSON.stringify(state)); redoStack = []; }
+    window.undo = () => { if(undoStack.length < 2) return; redoStack.push(undoStack.pop()); restoreState(undoStack[undoStack.length-1]); };
+    window.redo = () => { if(redoStack.length === 0) return; const next = redoStack.pop(); undoStack.push(next); restoreState(next); };
+    function restoreState(str) { try { const data = JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(o => scene.remove(o)); data.forEach(d => { const o = createEgg(new THREE.Color(d.col)); o.position.copy(d.pos); o.quaternion.copy(d.rot); o.userData.data.scale.copy(d.scale); o.userData.data.offsets = d.offsets.map(v => new THREE.Vector3(v.x,v.y,v.z)); updateMesh(o); scene.add(o); }); updateSelection([]); } catch(e){} }
+    window.saveData = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([undoStack[undoStack.length-1]], {type:"application/json"})); a.download = `crochet_v5.48.28.json`; a.click(); };
+    window.triggerLoad = () => document.getElementById('file-input').click();
+    window.handleLoad = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onload = (ev) => { restoreState(ev.target.result); pushHistory(); }; reader.readAsText(file); } };
 
-    /* [NEW APPENDED FUNCTIONS: P2D MODAL] */
+    /* [NEW P2D LOGIC] */
     window.openP2D = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-bg').style.display='block'; };
     window.closeP2D = () => { document.getElementById('p2d-modal').style.display='none'; document.getElementById('modal-bg').style.display='none'; };
     window.applyP2D = () => {
-        const text = document.getElementById('pattern-text').value;
-        if(!text.trim()) return alert("입력값이 없습니다.");
-        console.log("Generating 3D...");
+        const pattern = document.getElementById('pattern-text').value;
+        if(!pattern.trim()) return alert("패턴을 입력해주세요.");
+        console.log("Processing Pattern...");
         closeP2D();
     };
 
     function animate() {
         requestAnimationFrame(animate);
         if(currentEgg){
-            const {scale,off}=currentEgg.userData.data, p=currentEgg.position, q=currentEgg.quaternion;
-            const c=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-            handles.forEach((h,i)=>{ const lP=c[i].clone().multiply(scale).add(off[i]).add(c[i].clone().normalize().multiplyScalar(HOFF)); h.position.copy(p).add(lP.applyQuaternion(q)); });
-            [rotX, rotY, rotZ].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX) r.rotateY(Math.PI/2); if(r===rotY) r.rotateX(Math.PI/2);});
+            const {scale, offsets} = currentEgg.userData.data, p = currentEgg.position, q = currentEgg.quaternion;
+            const c = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+            handles.forEach((h, i) => { const lp = c[i].clone().multiply(scale).add(offsets[i]).add(c[i].clone().normalize().multiplyScalar(HANDLE_OFFSET)); h.position.copy(p).add(lp.applyQuaternion(q)); });
+            [rotX, rotY, rotZ].forEach(r => { r.position.copy(p); r.quaternion.copy(q); if(r===rotX) r.rotateY(Math.PI/2); if(r===rotY) r.rotateX(Math.PI/2); });
         }
         renderer.render(scene, camera); controls.update();
     }
