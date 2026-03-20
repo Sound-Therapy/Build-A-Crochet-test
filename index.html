@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.12 - P2D UI Integrated</title>
+    <title>Build-A-Crochet v5.48.13 - Logic Restored</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -40,10 +40,10 @@
 <div id="pattern-modal" class="modal">
     <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
     <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
-    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Project">
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (Pattern)</div>
+    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
     <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box;">
-        <option value="micro_0">0 Lace</option><option value="fine_1">1 Super Fine</option><option value="fine_2">2 Fine</option><option value="light_3">3 Light</option>
+        <option value="micro_0">0 Lace/Micro</option><option value="fine_1">1 Super Fine</option><option value="fine_2">2 Fine</option><option value="light_3">3 Light</option>
         <option value="medium_4" selected>4 Medium</option><option value="bulky_5">5 Bulky</option><option value="super_6">6 Super Bulky</option><option value="jumbo_7">7 Jumbo</option>
     </select>
     <div style="display:flex; justify-content:space-between;">
@@ -54,16 +54,14 @@
 
 <div id="p2d-modal" class="modal">
     <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">Pattern to Design (P2D)</div>
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">Design Name</div>
-    <input type="text" id="p2d-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="P2D Auto Design">
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (Design)</div>
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Choice</div>
     <select id="p2d-yarn-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box;">
-        <option value="micro_0">0 Lace</option><option value="fine_1">1 Super Fine</option><option value="fine_2">2 Fine</option><option value="light_3">3 Light</option>
+        <option value="micro_0">0 Lace/Micro</option><option value="fine_1">1 Super Fine</option><option value="fine_2">2 Fine</option><option value="light_3">3 Light</option>
         <option value="medium_4" selected>4 Medium</option><option value="bulky_5">5 Bulky</option><option value="super_6">6 Super Bulky</option><option value="jumbo_7">7 Jumbo</option>
     </select>
     <div style="display:flex; justify-content:space-between;">
         <button onclick="closeAllModals()" style="width:48%; padding:10px;">Cancel</button>
-        <button onclick="startP2DDesign()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold;">Create Design</button>
+        <button onclick="alert('P2D Design Engine Logic Standby')" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold;">디자인 생성</button>
     </div>
 </div>
 
@@ -95,7 +93,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.12</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.13</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -109,15 +107,18 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
+    // --- [ 5.48.11 Core Globals ] ---
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
-    let isPlacementMode = false, dragTarget = null, isDragging = false, mouseButton;
-    let rotX_H, rotY_H, rotZ_H, handles = [], groupGizmo, groupHandles = [], groupRotHandles = [];
-    let startScale, startPos, startRotation, startGroupData = [], lastMouseAngle = 0;
+    let isPlacementMode = false, dragTarget = null, isDragging = false;
+    let rotX_H, rotY_H, rotZ_H, handles = [];
+    let groupGizmo, groupHandles = [], groupRotHandles = [];
+    let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
     let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
-    let isBoxSelecting = false, boxStart = new THREE.Vector2(), selectBoxEl = document.getElementById('select-box');
+    let isBoxSelecting = false, boxStart = new THREE.Vector2();
+    let selectBoxEl = document.getElementById('select-box');
     let history = [], redoStack = [], currentSelection = [];
     
-    const yarnWeights = { micro_0: {roundH: 0.15, label: "0 Lace"}, fine_1: {roundH: 0.22}, fine_2: {roundH: 0.28}, light_3: {roundH: 0.32}, medium_4: {roundH: 0.38, label: "4 Medium"}, bulky_5: {roundH: 0.52}, super_6: {roundH: 0.75}, jumbo_7: {roundH: 1.10} };
+    const yarnWeights = { micro_0: {roundH: 0.15, label: "0 Lace/Micro"}, fine_1: {roundH: 0.22}, fine_2: {roundH: 0.28}, light_3: {roundH: 0.32}, medium_4: {roundH: 0.38, label: "4 Medium"}, bulky_5: {roundH: 0.52}, super_6: {roundH: 0.75}, jumbo_7: {roundH: 1.10} };
     const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
@@ -128,6 +129,7 @@
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth - 100, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
         scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -146,21 +148,51 @@
         captureState(); animate();
     }
 
-    // --- [ P2D & Pattern Modal Controllers ] ---
-    window.openPatternModal = () => { if (currentSelection.length === 0) return alert("Select items first."); showModal('pattern-modal'); };
+    // --- [ UI Controls ] ---
+    window.openPatternModal = () => { if (currentSelection.length === 0) return alert("디자인을 선택하세요."); showModal('pattern-modal'); };
     window.openP2DModal = () => { showModal('p2d-modal'); };
     function showModal(id) { document.getElementById(id).style.display='block'; document.getElementById('modal-overlay').style.display='block'; }
     window.closeAllModals = () => { document.querySelectorAll('.modal').forEach(m=>m.style.display='none'); document.getElementById('modal-overlay').style.display='none'; };
 
-    window.startAIAnalysis = () => { /* Pattern logic as v5.48.11 */ alert("Pattern Generation Starting..."); closeAllModals(); };
-    window.startP2DDesign = () => { 
-        const name = document.getElementById('p2d-name-input').value;
-        const weight = document.getElementById('p2d-yarn-select').value;
-        alert(`P2D Design Engine Starting...\nProject: ${name}\nYarn: ${weight}`); 
-        closeAllModals(); 
+    window.startAIAnalysis = () => {
+        const weightKey = document.getElementById('yarn-weight-select').value;
+        const config = yarnWeights[weightKey];
+        const targets = currentSelection;
+        closeAllModals();
+
+        let maxD = -1, tip = new THREE.Vector3(), startColor = '#ffffff';
+        targets.forEach(obj => {
+            const pos = obj.geometry.attributes.position, matrix = obj.matrixWorld;
+            for(let i=0; i<pos.count; i++){
+                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix), d = v.length();
+                if(d > maxD) { maxD = d; tip.copy(v); startColor = '#' + obj.material.color.getHexString(); }
+            }
+        });
+
+        const rounds = [], step = config.roundH / CM_RATIO;
+        const direction = new THREE.Vector3().subVectors(new THREE.Vector3(), tip).normalize();
+        let lastColor = startColor;
+        rounds.push({rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` });
+        
+        for(let r=1; r<=40; r++){
+            const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
+            if (checkPos.y <= 0) break;
+            const ray = new THREE.Raycaster(checkPos, new THREE.Vector3(0, 1, 0));
+            const hit = ray.intersectObjects(targets);
+            let curColor = lastColor;
+            if(hit.length > 0) curColor = '#' + hit[0].object.material.color.getHexString();
+            if(curColor !== lastColor){ rounds.push({rnd: r, desc: `⭐ Change Color to ${colorNames[curColor] || curColor.toUpperCase()}`}); lastColor = curColor; }
+            rounds.push({rnd: r, desc: (r === 1) ? "Magic Ring" : "sc around", sts: 6 + (r * 2)});
+        }
+
+        const win = window.open("", "_blank", "width=400,height=600");
+        let html = `<body style="font-family:monospace; padding:20px;"><h3>🧶 Pattern Result</h3><table border="1" style="width:100%; border-collapse:collapse;"><tr><th>Rnd</th><th>Instruction</th></tr>`;
+        rounds.forEach(x => { html += `<tr><td>R${x.rnd}</td><td>${x.desc}</td></tr>`; });
+        html += `</table></body>`;
+        win.document.write(html);
     };
 
-    // --- [ Engine Physics & Controls (Unchanged) ] ---
+    // --- [ 5.48.11 Engine Logic ] ---
     function createEgg(color, isGhost = false) {
         const points = [];
         for (let i = 0; i <= 20; i++) {
@@ -195,10 +227,7 @@
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-        if(isPlacementMode && e.button===0) {
-            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
-            if(h.length>0) spawnEgg(h[0].point); return;
-        }
+        if(isPlacementMode && e.button===0) { const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper")); if(h.length>0) spawnEgg(h[0].point); return; }
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -213,70 +242,72 @@
                     dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
                 } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
                 lastMouseAngle=getMouseAngle(e,currentEgg);
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                startGroupData=currentSelection.map(e=>({pos:e.position.clone(),scale:e.userData.data.scale.clone(),rot:e.quaternion.clone()}));
+                startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
             } return;
         }
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
             if(e.button===0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
+            else if(e.button===0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
             const pl=new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             ray.ray.intersectPlane(pl, startIntersect);
-        } else { if(e.button===0) updateSelectionVisuals([]); }
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
+        } else { if(e.button===0) { updateSelectionVisuals([]); controls.enabled=true; } else if(e.button===2){ isBoxSelecting=true; boxStart.set(e.clientX, e.clientY); selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px'; updateSelectionVisuals([]); controls.enabled=false; } }
     }
 
     function onMove(e) {
-        if(isPlacementMode){
-            const rect = renderer.domElement.getBoundingClientRect();
-            const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
-            const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
-            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; } else ghostEgg.visible=false;
-        }
-        if(!isDragging || !dragTarget) return;
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
+        if(isPlacementMode){ const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper")); if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; } else ghostEgg.visible=false; }
+        if(isBoxSelecting){ const x=Math.min(boxStart.x, e.clientX), y=Math.min(boxStart.y, e.clientY), w=Math.abs(e.clientX-boxStart.x), h=Math.abs(e.clientY-boxStart.y); selectBoxEl.style.left=x+'px'; selectBoxEl.style.top=y+'px'; selectBoxEl.style.width=w+'px'; selectBoxEl.style.height=h+'px'; return; }
+        if(!isDragging || !dragTarget) return;
         const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
         if(ray.ray.intersectPlane(pl, intersect)){
-            if(currentEgg){
-                if(dragTarget.userData.isHandle){
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget) && mouseButton===0 && !dragTarget.userData.isHandle && !dragTarget.userData.isGroupHandle){ currentSelection.forEach((eg,i)=>eg.position.copy(intersect).add(startGroupData[i].offset)); updateGroupGizmoVisuals(); }
+            else if(currentEgg){
+                if(dragTarget.userData.isRotationHandle){ const ang=getMouseAngle(e,currentEgg), da=ang-lastMouseAngle; const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1); currentEgg.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(ax,-da)); lastMouseAngle=ang; }
+                else if(dragTarget.userData.isEgg) dragTarget.position.copy(intersect);
+                else if(dragTarget.userData.isHandle){
                     const id=dragTarget.userData.id, data=currentEgg.userData.data;
-                    const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
-                    if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
-                    else if(mouseButton===2){
-                        const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
-                        const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
-                        const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-                        currentEgg.position.add(worldAnchorPos.clone().sub(co));
-                    } updateMesh(currentEgg);
-                } else if(dragTarget.userData.isEgg) dragTarget.position.copy(intersect);
+                    if(mouseButton===0 && e.ctrlKey){ const ld=intersect.clone().sub(startIntersect).applyQuaternion(currentEgg.quaternion.clone().invert()); data.offsets[id].copy(dragTarget.userData.startOffset).add(ld); updateMesh(currentEgg); }
+                    else { const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist); if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r); else if(mouseButton===2){ const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r; const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1; const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position); currentEgg.position.add(worldAnchorPos.clone().sub(co)); } updateMesh(currentEgg); }
+                }
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                if(dragTarget.userData.isGroupHandle){ const r=Math.max(0.01, intersect.distanceTo(c)/startHandleDist); currentSelection.forEach((e,i)=>{e.userData.data.scale.copy(startGroupData[i].scale).multiplyScalar(r); updateMesh(e); e.position.copy(c).add(startGroupData[i].pos.clone().sub(c).multiplyScalar(r));}); }
+                else if(dragTarget.userData.isGroupRotationHandle){ const da=getMouseAngle(e,{position:c})-lastMouseAngle; const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1); const rq=new THREE.Quaternion().setFromAxisAngle(ax,-da); currentSelection.forEach(eg=>{eg.position.sub(c).applyQuaternion(rq).add(c); eg.quaternion.premultiply(rq);}); lastMouseAngle+=da; } updateGroupGizmoVisuals();
             } updateRealTimeSize();
         }
     }
 
-    function onUp() { isDragging=false; dragTarget=null; controls.enabled=true; captureState(); }
-    function updateSelectionVisuals(sel) {
-        currentSelection=sel; updateRealTimeSize();
-        [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false);
-        groupGizmo.visible=false; document.getElementById('palette').style.display='none';
-        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); document.getElementById('palette').style.display='grid'; } else currentEgg=null;
-    }
-    function createHandles() {
-        const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;};
-        handles=[0,1,2,3,4,5].map(id=>mkH(id));
-        const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;};
-        rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
-    }
-    function createGroupGizmo() { groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo); }
+    function onUp(e) { if(isBoxSelecting){ isBoxSelecting=false; selectBoxEl.style.display='none'; const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY); const rect=renderer.domElement.getBoundingClientRect(); const selected = []; scene.children.filter(o=>o.userData.isEgg).forEach(egg => { const sp = egg.position.clone().project(camera); const px = (sp.x + 1) * rect.width / 2 + rect.left, py = (-sp.y + 1) * rect.height / 2 + rect.top; if(px >= x1 && px <= x2 && py >= y1 && py <= y2) selected.push(egg); }); updateSelectionVisuals(selected); } if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true; }
+    function updateSelectionVisuals(sel) { currentSelection=sel; updateRealTimeSize(); [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false); groupGizmo.visible=false; document.getElementById('palette').style.display='none'; if(sel.length===0){ currentEgg=null; return; } document.getElementById('palette').style.display='grid'; if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); } else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); } }
+    function createHandles() { const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;}; handles=[0,1,2,3,4,5].map(id=>mkH(id)); const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;}; rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z'); }
+    function createGroupGizmo() { groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo); const mkG=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16),new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m;}; groupHandles=[0,1,2,3,4,5,6,7].map(id=>mkG(id)); const mkGR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r;}; groupRotHandles=[mkGR(0xff0000,'x'), mkGR(0x00ff00,'y'), mkGR(0x0000ff,'z')]; }
+    function updateGroupGizmoVisuals() { if(currentSelection.length<2) return; const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));}); const c=b.getCenter(new THREE.Vector3()), s=b.getSize(new THREE.Vector3()); const hb=new THREE.Mesh(new THREE.BoxGeometry(s.x,s.y,s.z)); hb.position.copy(c); groupGizmo.update(hb); const crn=[new THREE.Vector3(-0.5,0.5,0.5),new THREE.Vector3(-0.5,0.5,-0.5),new THREE.Vector3(-0.5,-0.5,0.5),new THREE.Vector3(-0.5,-0.5,-0.5),new THREE.Vector3(0.5,0.5,0.5),new THREE.Vector3(0.5,0.5,-0.5),new THREE.Vector3(0.5,-0.5,0.5),new THREE.Vector3(0.5,-0.5,-0.5)]; groupHandles.forEach((h,i)=>h.position.copy(c).add(crn[i].clone().multiply(s))); groupRotHandles.forEach((r,i)=>{r.position.copy(c); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2);}); }
     function createGhost() { ghostEgg=createEgg(0x28a745,true); ghostEgg.visible=false; scene.add(ghostEgg); }
     function togglePlacementMode() { isPlacementMode=!isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
     function spawnEgg(p) { const eg=createEgg(0xff69b4); eg.position.copy(p).y+=10.01; scene.add(eg); captureState(); updateSelectionVisuals([eg]); isPlacementMode=false; }
     function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
     function updateRealTimeSize() { const box=new THREE.Box3(); if(currentSelection.length===0) return; currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); }); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM_RATIO).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM_RATIO).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM_RATIO).toFixed(1); }
     window.updateColor=(c)=>{ currentSelection.forEach(e=>e.material.color.set(c)); captureState(); };
-    function captureState() { const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:e.position.clone(),rot:e.quaternion.clone(),scale:e.userData.data.scale.clone(),col:e.material.color.getHex()})); history.push(JSON.stringify(s)); }
+    window.executeUndo=()=>{if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]);};
+    window.executeRedo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
+    function captureState() { const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:e.position.clone(),rot:e.quaternion.clone(),scale:e.userData.data.scale.clone(),offsets:e.userData.data.offsets.map(o=>o.clone()),col:e.material.color.getHex()})); history.push(JSON.stringify(s)); redoStack=[]; updateNavButtons(); }
+    function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>scene.remove(e)); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.copy(d.pos); e.quaternion.copy(d.rot); e.userData.data.scale.copy(d.scale); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e){} }
+    function updateNavButtons(){ document.getElementById('undo-btn').disabled=(history.length<2); document.getElementById('redo-btn').disabled=(redoStack.length===0); }
     function onKeyDown(e) { if(e.key === "Delete" && currentSelection.length > 0) { currentSelection.forEach(obj => scene.remove(obj)); updateSelectionVisuals([]); captureState(); } }
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.48.json`; a.click();};
+    window.triggerFileSelect=()=>document.getElementById('file-input').click();
+    window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
 
     function animate() {
         requestAnimationFrame(animate);
