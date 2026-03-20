@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.11 - Pattern Engine Enhanced</title>
+    <title>Build-A-Crochet v5.48.33 - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -28,13 +28,25 @@
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
         
-        #pattern-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
+        /* Modals */
+        #pattern-modal, #p2d-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
         #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
     </style>
 </head>
 <body>
 
-<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="modal-overlay" onclick="closeAllModals()"></div>
+
+<div id="p2d-modal">
+    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">P2D Interpreter</div>
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Paste Pattern Below:</div>
+    <textarea id="p2d-input" style="width:100%; height:120px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:11px; resize:none;" placeholder="Round 1: 6 sc in MR..."></textarea>
+    <div style="display:flex; justify-content:space-between;">
+        <button onclick="closeAllModals()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
+        <button onclick="executeP2D()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
+    </div>
+</div>
+
 <div id="pattern-modal">
     <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
     <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
@@ -50,8 +62,6 @@
         <option value="jumbo_7">7 Jumbo (12.75mm+)</option>
         <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
     </select>
-    <div style="font-size:11px; color:#666; margin-top:10px; margin-bottom:5px;">Paste Pattern (P2D)</div>
-    <textarea id="p2d-input" style="width:100%; height:80px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:11px; resize:none;" placeholder="도안을 여기에 붙여넣으세요..."></textarea>
     <div style="display:flex; justify-content:space-between;">
         <button onclick="closeModal()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
         <button onclick="startAIAnalysis()" style="width:48%; padding:10px; background:#007bff; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
@@ -80,13 +90,13 @@
     
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
         <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
-        <button class="p2d-btn" onclick="alert('P2D logic standby')">P2D</button>
+        <button class="p2d-btn" onclick="openP2D()">P2D</button>
         <button class="learn-btn" onclick="alert('DEEP LEARN logic standby')">DEEP LEARN</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.11</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.33</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -110,8 +120,8 @@
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], redoStack = [], currentSelection = [];
-    
-    // --- [ Extended Yarn Data (8 Steps) ] ---
+
+    // --- [ Extended Yarn Data ] ---
     const yarnWeights = {
         micro_0: {roundH: 0.15, label: "0 Lace/Micro"},
         fine_1: {roundH: 0.22, label: "1 Super Fine"},
@@ -124,6 +134,24 @@
     };
     const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
+
+    // --- [ P2D Logic ] ---
+    window.openP2D = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
+    window.closeAllModals = () => { document.getElementById('p2d-modal').style.display='none'; document.getElementById('pattern-modal').style.display='none'; document.getElementById('modal-overlay').style.display='none'; };
+    window.executeP2D = () => {
+        const text = document.getElementById('p2d-input').value;
+        const matches = text.match(/Round|Rnd|R\d+/gi) || [];
+        const rounds = Math.max(1, matches.length);
+        const config = yarnWeights[document.getElementById('yarn-weight-select').value] || yarnWeights.medium_4;
+        
+        const egg = createEgg(0x6f42c1);
+        const s = (rounds * config.roundH) / (BASE_H * CM_RATIO);
+        egg.userData.data.scale.set(s, s * 1.2, s);
+        egg.position.set(0, s * 10, 0);
+        updateMesh(egg);
+        scene.add(egg);
+        closeAllModals(); captureState(); updateSelectionVisuals([egg]);
+    };
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
@@ -151,16 +179,8 @@
         captureState(); animate();
     }
 
-    // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
-    window.openPatternModal = () => { 
-        if (currentSelection.length === 0) return alert("디자인을 먼저 선택해주세요."); 
-        document.getElementById('pattern-modal').style.display='block'; 
-        document.getElementById('modal-overlay').style.display='block'; 
-    };
-    window.closeModal = () => { 
-        document.getElementById('pattern-modal').style.display='none'; 
-        document.getElementById('modal-overlay').style.display='none'; 
-    };
+    window.openPatternModal = () => { if (currentSelection.length === 0) return alert("디자인을 먼저 선택해주세요."); document.getElementById('pattern-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
+    window.closeModal = () => closeAllModals();
 
     window.startAIAnalysis = () => {
         const weightKey = document.getElementById('yarn-weight-select').value;
@@ -182,62 +202,43 @@
         const direction = new THREE.Vector3().subVectors(new THREE.Vector3(), tip).normalize();
         let lastColor = startColor;
         rounds.push({rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` });
-        
-        // 3D 공간 레이캐스팅 분석 (v5.47 원본 로직 유지)
+
         for(let r=1; r<=40; r++){
             const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
             const ray = new THREE.Raycaster(checkPos, new THREE.Vector3(0, 1, 0));
             const hit = ray.intersectObjects(targets);
-            
             let curColor = lastColor;
             if(hit.length > 0) curColor = '#' + hit[0].object.material.color.getHexString();
-            
             if(curColor !== lastColor){
                 rounds.push({rnd: r, desc: `⭐ Change Color to ${colorNames[curColor] || curColor.toUpperCase()}`});
                 lastColor = curColor;
             }
-            
-            // 바닥에 닿거나 모델 끝이면 종료
             if (checkPos.y <= 0) break;
-
             let instruction = (r === 1) ? "Magic Ring" : (r % 3 === 0 ? "inc 1, sc around" : "sc around");
             rounds.push({rnd: r, desc: instruction, sts: 6 + (r * 2)});
         }
 
-        // 결과 팝업창 생성
         const win = window.open("", "_blank", "width=450,height=700");
-        let html = `
-        <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
-            <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
-                <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.11</p>
-                <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
-                    <tr style="background:#eee;">
-                        <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
-                    </tr>`;
-        rounds.forEach(x => {
-            html += `<tr><td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
-                         <td style="padding:8px; border:1px solid #ddd;">${x.desc}</td>
-                         <td style="padding:8px; border:1px solid #ddd;">${x.sts || '-'}</td></tr>`;
-        });
+        let html = `<body style="font-family:monospace; padding:20px; background:#f9f9f9;"><div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);"><h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2><p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.11</p><table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;"><tr style="background:#eee;"><th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th></tr>`;
+        rounds.forEach(x => { html += `<tr><td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td><td style="padding:8px; border:1px solid #ddd;">${x.desc}</td><td style="padding:8px; border:1px solid #ddd;">${x.sts || '-'}</td></tr>`; });
         html += `</table></div></body>`;
         win.document.write(html);
     };
 
-    // --- [ Restoration of 5.47.0 Core Physics (3.5th Power) ] ---
     function createEgg(color, isGhost = false) {
         const points = [];
         for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
             points.push(new THREE.Vector2(Math.max(0.1, r), y));
         }
-        const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
+        const geo = new THREE.LatheGeometry(points, 32);
+        geo.translate(0, -10, 0);
         geo.userData.origPos = geo.attributes.position.clone();
         const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
         const egg = new THREE.Mesh(geo, mat);
         if (!isGhost) { 
-            egg.userData.isEgg = true; 
-            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
+            egg.userData.isEgg = true;
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) };
         }
         return egg;
     }
@@ -249,7 +250,7 @@
             const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
             let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님이 강조하신 3.5제곱
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5);
                 tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
             }
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
@@ -257,18 +258,15 @@
         pos.needsUpdate = true;
     }
 
-    // --- [ Drag & Interaction (Anchor Point Logic) ] ---
     function onDown(e) {
         if(e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-        
         if(isPlacementMode && e.button===0) {
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
             if(h.length>0) spawnEgg(h[0].point); return;
         }
-
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -279,19 +277,19 @@
                 if(dragTarget.userData.isHandle){
                     const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1;
                     const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // 앵커 포인트 고정 로직
+                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
                     startHandleDist=startIntersect.distanceTo(worldAnchorPos);
                     dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
                 } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
                 lastMouseAngle=getMouseAngle(e,currentEgg);
             } else if(currentSelection.length>1){
-                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const b=new THREE.Box3();
+                currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
                 const c=b.getCenter(new THREE.Vector3());
                 startGroupData=currentSelection.map(e=>({pos:e.position.clone(),scale:e.userData.data.scale.clone(),rot:e.quaternion.clone()}));
                 startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
             } return;
         }
-
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -310,7 +308,6 @@
         }
     }
 
-    // --- [ Move, Up, Render & Other Logic (Skipped but identical to 5.47/5.48) ] ---
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
@@ -346,7 +343,8 @@
                         const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
                         if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
                         else if(mouseButton===2){
-                            const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
+                            const d=(id<2)?'y':(id<4?'x':'z');
+                            data.scale.copy(startScale); data.scale[d]*=r;
                             const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
                             const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
                             currentEgg.position.add(worldAnchorPos.clone().sub(co));
@@ -354,7 +352,8 @@
                     }
                 }
             } else if(currentSelection.length>1){
-                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const b=new THREE.Box3();
+                currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
                 const c=b.getCenter(new THREE.Vector3());
                 if(dragTarget.userData.isGroupHandle){
                     const r=Math.max(0.01, intersect.distanceTo(c)/startHandleDist);
@@ -370,19 +369,7 @@
         }
     }
 
-    function onUp(e) {
-        if(isBoxSelecting){
-            isBoxSelecting=false; selectBoxEl.style.display='none';
-            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
-            const rect=renderer.domElement.getBoundingClientRect(); const selected = [];
-            scene.children.filter(o=>o.userData.isEgg).forEach(egg => {
-                const sp = egg.position.clone().project(camera);
-                const px = (sp.x + 1) * rect.width / 2 + rect.left, py = (-sp.y + 1) * rect.height / 2 + rect.top;
-                if(px >= x1 && px <= x2 && py >= y1 && py <= y2) selected.push(egg);
-            }); updateSelectionVisuals(selected);
-        }
-        if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true;
-    }
+    function onUp() { if(isBoxSelecting){ isBoxSelecting=false; selectBoxEl.style.display='none'; } if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true; }
 
     function updateSelectionVisuals(sel) {
         currentSelection=sel; updateRealTimeSize();
