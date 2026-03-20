@@ -1,4 +1,3 @@
-// [ engine.js ]
 let scene, camera, renderer, controls, currentEgg, ghostEgg;
 let isPlacementMode = false, dragTarget = null, isDragging = false;
 let rotX_H, rotY_H, rotZ_H, handles = [];
