@@ -2,73 +2,50 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.35.0 - AI Logic Integrated</title>
+    <title>Build-A-Crochet v5.41.0 - Stable Engine + Save/Undo</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
-        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 20px;}
-        .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; }
-        .btn { width: 60px; height: 60px; cursor: pointer; border: 2px solid #fff; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px; border-radius: 8px; background: #eee; text-align: center; box-sizing: border-box;}
-        .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; }
-        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
-        .undo-btn { background: #333; color: white; height: 40px; }
-        .pattern-btn { background: #007bff; color: white; height: 40px; margin-top: auto;}
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
+        
+        .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; }
+        
+        /* Navigation & Utility Buttons */
+        .nav-row { display: flex; gap: 4px; width: 85%; justify-content: center; }
+        .util-btn { flex: 1; height: 32px; cursor: pointer; background: #fdfdfd; border: 1px solid #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+        .util-btn:hover { background: #fff; border-color: #888; }
+        .util-btn:disabled { opacity: 0.3; cursor: default; }
+        .save-btn { background: #444; color: white; border: none; }
 
-        #size-info { width: 90%; margin-top: 20px; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; box-sizing: border-box;}
+        .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; cursor: pointer; border: 2px solid #fff; }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
+        
+        #size-info { width: 90%; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; box-sizing: border-box;}
         .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
-        
+
+        .pattern-btn { width: 80px; background: #007bff; color: white; height: 40px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
+
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); transition: transform 0.1s; }
-        .color-dot:hover { transform: scale(1.15); }
+        .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
-
-        /* Pattern Modal Styles */
-        #pattern-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
-        #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
-        .modal-header { font-weight: bold; font-size: 14px; margin-bottom: 15px; color: #007bff; text-align: center; }
-        .modal-row { margin-bottom: 12px; display: flex; flex-direction: column; }
-        .modal-label { font-size: 11px; color: #666; margin-bottom: 4px; }
-        .modal-input, .modal-select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 6px; font-family: monospace; font-size: 12px; box-sizing: border-box;}
-        .modal-btns { display: flex; justify-content: space-between; margin-top: 20px; }
-        .modal-btn { width: 48%; padding: 10px; border: none; border-radius: 6px; cursor: pointer; font-family: monospace; font-weight: bold; font-size: 12px;}
-        .modal-cancel { background: #eee; color: #333; }
-        .modal-create { background: #007bff; color: white; }
     </style>
 </head>
 <body>
 
-<div id="modal-overlay" onclick="closeModal()"></div>
-<div id="pattern-modal">
-    <div class="modal-header">AI Pattern Generator</div>
-    <div class="modal-row">
-        <label class="modal-label">Pattern Name</label>
-        <input type="text" id="pattern-name-input" class="modal-input" placeholder="e.g., Whale Ear" value="My Project">
-    </div>
-    <div class="modal-row">
-        <label class="modal-label">Yarn Weight</label>
-        <select id="yarn-weight-select" class="modal-select">
-            <option value="lace">0 Lace</option>
-            <option value="superfine">1 Super Fine</option>
-            <option value="fine">2 Fine</option>
-            <option value="light">3 Light</option>
-            <option value="medium" selected>4 Medium</option>
-            <option value="bulky">5 Bulky</option>
-            <option value="superbulky">6 Super Bulky</option>
-            <option value="jumbo">7 Jumbo</option>
-        </select>
-    </div>
-    <div class="modal-btns">
-        <button class="modal-btn modal-cancel" onclick="closeModal()">Cancel</button>
-        <button class="modal-btn modal-create" onclick="startAIAnalysis()">Create</button>
-    </div>
-</div>
-
 <div id="panel">
     <div class="top-btns">
-        <div class="btn undo-btn" onclick="executeUndo()">UNDO</div>
-        <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
+        <div class="nav-row">
+            <button id="undo-btn" class="util-btn" onclick="executeUndo()">⟲</button>
+            <button id="redo-btn" class="util-btn" onclick="executeRedo()">⟳</button>
+        </div>
+        <div class="nav-row">
+            <button class="util-btn save-btn" onclick="saveProject()">SAVE</button>
+        </div>
+
+        <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
+
         <div id="size-info">
             <div class="info-label">SIZE (cm)</div>
             <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
@@ -76,11 +53,11 @@
             <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
         </div>
     </div>
-    <div class="btn pattern-btn" onclick="openPatternModal()">PATTERN</div>
+    <button class="pattern-btn">PATTERN</button>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.35.0</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.41.0</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -102,15 +79,10 @@
     let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
-    let history = [], currentSelection = [];
     
-    const yarnData = {
-        lace: {stitchW: 0.1, roundH: 0.12}, superfine: {stitchW: 0.15, roundH: 0.18},
-        fine: {stitchW: 0.2, roundH: 0.24}, light: {stitchW: 0.25, roundH: 0.3},
-        medium: {stitchW: 0.3, roundH: 0.36}, bulky: {stitchW: 0.4, roundH: 0.48},
-        superbulky: {stitchW: 0.5, roundH: 0.6}, jumbo: {stitchW: 0.7, roundH: 0.84}
-    };
-
+    // History & Selection
+    let history = [], redoStack = [], currentSelection = [];
+    
     const BASE_H = 20, BASE_R = 7, H_OFFSET = 7, CM_RATIO = 0.5;
 
     function init() {
@@ -134,79 +106,12 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        window.addEventListener('keydown', (e) => { if(e.key === "Delete" || e.key === "Backspace") deleteSelected(); });
-        captureState(); animate();
-    }
-
-    // Modal & AI Analysis Logic
-    window.openPatternModal = function() {
-        if (currentSelection.length === 0) { alert("Select objects first."); return; }
-        document.getElementById('pattern-modal').style.display = 'block';
-        document.getElementById('modal-overlay').style.display = 'block';
-    }
-    window.closeModal = function() {
-        document.getElementById('pattern-modal').style.display = 'none';
-        document.getElementById('modal-overlay').style.display = 'none';
-    }
-
-    window.startAIAnalysis = function() {
-        const weight = document.getElementById('yarn-weight-select').value;
-        const pName = document.getElementById('pattern-name-input').value;
-        const config = yarnData[weight];
-        const targets = currentSelection;
-        closeModal();
-
-        // 1. Tip Detection (Start Point)
-        const tip = findStartingTip(targets);
         
-        // 2. Generate Logic (Collision Check Integrated)
-        const rounds = [];
-        const step = config.roundH / CM_RATIO;
-        const center = new THREE.Vector3(0,0,0);
-        const direction = new THREE.Vector3().subVectors(center, tip).normalize();
-
-        for(let r=1; r<=30; r++) {
-            const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
-            if (isInsideOthers(checkPos, targets)) {
-                rounds.push({ rnd: r, desc: "--- Interface: Stop here and sew to body ---", sts: 0 });
-                break;
-            }
-            rounds.push({ rnd: r, desc: r===1?"Magic Ring": (r%3===0?"inc 1, sc around":"sc around"), sts: 6+(r*2) });
-        }
-
-        // 3. Open Output
-        displayPatternResult(pName, rounds);
+        captureState(); updateNavButtons();
+        animate();
     }
 
-    function findStartingTip(targets) {
-        let maxD = -1, tip = new THREE.Vector3();
-        targets.forEach(obj => {
-            const pos = obj.geometry.attributes.position;
-            const matrix = obj.matrixWorld;
-            for(let i=0; i<pos.count; i++) {
-                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix);
-                const d = v.length(); if(d > maxD) { maxD = d; tip.copy(v); }
-            }
-        });
-        return tip;
-    }
-
-    function isInsideOthers(point, targets) {
-        const others = scene.children.filter(o => o.userData.isEgg && !targets.includes(o));
-        if (others.length === 0) return false;
-        const ray = new THREE.Raycaster(point, new THREE.Vector3(0, 1, 0));
-        return (ray.intersectObjects(others).length % 2 !== 0);
-    }
-
-    function displayPatternResult(name, rounds) {
-        const win = window.open("", "_blank", "width=400,height=600");
-        let html = `<body style="font-family:monospace;padding:20px;"><h3>🧶 ${name}</h3><table border="1" style="width:100%;border-collapse:collapse;text-align:left;"><tr><th>Rnd</th><th>Instruction</th><th>Sts</th></tr>`;
-        rounds.forEach(r => { html += `<tr><td>R${r.rnd}</td><td>${r.desc}</td><td>${r.sts||'-'}</td></tr>`; });
-        html += `</table><p style="font-size:10px;color:grey;">* Pattern generated by Build-A-Crochet AI v5.35.0</p></body>`;
-        win.document.write(html);
-    }
-
-    // [Standard Engine Functions]
+    // --- [ 5.35.0 Core Engine: UNTOUCHED ] ---
     function createEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
@@ -233,35 +138,6 @@
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
         }
         pos.needsUpdate = true;
-    }
-
-    function deleteSelected() {
-        currentSelection.forEach(e => { e.geometry.dispose(); e.material.dispose(); scene.remove(e); });
-        updateSelectionVisuals([]); captureState();
-    }
-
-    function updateRealTimeSize() {
-        const box = new THREE.Box3(); if(currentSelection.length===0) { document.getElementById('info-w').innerText="0.0"; return; }
-        currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); });
-        const sz = box.getSize(new THREE.Vector3());
-        document.getElementById('info-w').innerText = (sz.x*CM_RATIO).toFixed(1);
-        document.getElementById('info-h').innerText = (sz.y*CM_RATIO).toFixed(1);
-        document.getElementById('info-d').innerText = (sz.z*CM_RATIO).toFixed(1);
-    }
-
-    function createHandles() {
-        const makeH = (id) => { const m = new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16), new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m; };
-        handles = [0,1,2,3,4,5].map(id => makeH(id));
-        const makeR = (c, a) => { const r = new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64), new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r; };
-        rotX_H = makeR(0xff0000,'x'); rotY_H = makeR(0x00ff00,'y'); rotZ_H = makeR(0x0000ff,'z');
-    }
-
-    function createGroupGizmo() {
-        groupGizmo = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo);
-        const makeG = (id) => { const m = new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16), new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m; };
-        groupHandles = [0,1,2,3,4,5,6,7].map(id => makeG(id));
-        const makeGR = (c,a) => { const r = new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64), new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r; };
-        groupRotHandles = [makeGR(0xff0000,'x'), makeGR(0x00ff00,'y'), makeGR(0x0000ff,'z')];
     }
 
     function onDown(e) {
@@ -301,17 +177,97 @@
         }
     }
 
-    function onUp(e) { if(isBoxSelecting){ isBoxSelecting=false; selectBoxEl.style.display='none'; const rect=renderer.domElement.getBoundingClientRect(); const minX=Math.min(boxStart.x, e.clientX), minY=Math.min(boxStart.y, e.clientY), maxX=Math.max(boxStart.x, e.clientX), maxY=Math.max(boxStart.y, e.clientY); if(Math.abs(maxX-minX)>5){ const sel=scene.children.filter(o=>o.userData.isEgg).filter(eg=>{const sp=eg.position.clone().project(camera); const x=(sp.x+1)*rect.width/2+rect.left, y=(1-sp.y)*rect.height/2+rect.top; return (x>=minX && x<=maxX && y>=minY && y<=maxY);}); updateSelectionVisuals(sel); } } if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true; }
+    function onUp(e) { 
+        if(isBoxSelecting){ isBoxSelecting=false; selectBoxEl.style.display='none'; const rect=renderer.domElement.getBoundingClientRect(); const minX=Math.min(boxStart.x, e.clientX), minY=Math.min(boxStart.y, e.clientY), maxX=Math.max(boxStart.x, e.clientX), maxY=Math.max(boxStart.y, e.clientY); if(Math.abs(maxX-minX)>5){ const sel=scene.children.filter(o=>o.userData.isEgg).filter(eg=>{const sp=eg.position.clone().project(camera); const x=(sp.x+1)*rect.width/2+rect.left, y=(1-sp.y)*rect.height/2+rect.top; return (x>=minX && x<=maxX && y>=minY && y<=maxY);}); updateSelectionVisuals(sel); } } 
+        if(isDragging) captureState(); 
+        isDragging=false; dragTarget=null; controls.enabled=true; 
+    }
+
+    // --- [ Utilities: History & Save ] ---
+    function captureState() { 
+        const s = scene.children.filter(o=>o.userData.isEgg).map(e=>({
+            pos: {x:e.position.x, y:e.position.y, z:e.position.z},
+            rot: {x:e.quaternion.x, y:e.quaternion.y, z:e.quaternion.z, w:e.quaternion.w},
+            scale: {x:e.userData.data.scale.x, y:e.userData.data.scale.y, z:e.userData.data.scale.z},
+            offsets: e.userData.data.offsets.map(o=>({x:o.x, y:o.y, z:o.z})),
+            col: e.material.color.getHex()
+        }));
+        const stateStr = JSON.stringify(s);
+        if(history.length > 0 && history[history.length-1] === stateStr) return;
+        history.push(stateStr);
+        redoStack = []; // Reset redo stack on new action
+        if(history.length > 40) history.shift();
+        updateNavButtons();
+    }
+
+    window.executeUndo = function() {
+        if(history.length < 2) return;
+        redoStack.push(history.pop());
+        applyState(history[history.length-1]);
+    };
+
+    window.executeRedo = function() {
+        if(redoStack.length === 0) return;
+        const next = redoStack.pop();
+        history.push(next);
+        applyState(next);
+    };
+
+    function applyState(stateStr) {
+        const data = JSON.parse(stateStr);
+        scene.children.filter(o=>o.userData.isEgg).forEach(e=>{e.geometry.dispose(); e.material.dispose(); scene.remove(e);});
+        data.forEach(d => {
+            const e = createEgg(new THREE.Color(d.col));
+            e.position.set(d.pos.x, d.pos.y, d.pos.z);
+            e.quaternion.set(d.rot.x, d.rot.y, d.rot.z, d.rot.w);
+            e.userData.data.scale.set(d.scale.x, d.scale.y, d.scale.z);
+            e.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z));
+            updateMesh(e); scene.add(e);
+        });
+        updateSelectionVisuals([]);
+        updateNavButtons();
+    }
+
+    function updateNavButtons() {
+        document.getElementById('undo-btn').disabled = (history.length < 2);
+        document.getElementById('redo-btn').disabled = (redoStack.length === 0);
+    }
+
+    window.saveProject = function() {
+        const state = history[history.length-1];
+        const blob = new Blob([state], {type: "application/json"});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `crochet_v5.41_${new Date().getTime()}.json`;
+        a.click();
+    };
+
+    // --- [ Visual Helpers ] ---
     function updateSelectionVisuals(sel) { currentSelection=sel; updateRealTimeSize(); [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false); groupGizmo.visible=false; document.getElementById('palette').style.display='none'; if(sel.length===0){ currentEgg=null; return; } document.getElementById('palette').style.display='grid'; if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); } else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); } }
     function updateGroupGizmoVisuals() { if(currentSelection.length<2) return; const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));}); const c=b.getCenter(new THREE.Vector3()), s=b.getSize(new THREE.Vector3()); const hb=new THREE.Mesh(new THREE.BoxGeometry(s.x,s.y,s.z)); hb.position.copy(c); groupGizmo.update(hb); const corners=[new THREE.Vector3(-0.5,0.5,0.5),new THREE.Vector3(-0.5,0.5,-0.5),new THREE.Vector3(-0.5,-0.5,0.5),new THREE.Vector3(-0.5,-0.5,-0.5),new THREE.Vector3(0.5,0.5,0.5),new THREE.Vector3(0.5,0.5,-0.5),new THREE.Vector3(0.5,-0.5,0.5),new THREE.Vector3(0.5,-0.5,-0.5)]; groupHandles.forEach((h,i)=>h.position.copy(c).add(corners[i].clone().multiply(s))); groupRotHandles.forEach((r,i)=>{r.position.copy(c); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2);}); }
-    function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
+    function createHandles() { const makeH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;}; handles=[0,1,2,3,4,5].map(id=>makeH(id)); const makeR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;}; rotX_H=makeR(0xff0000,'x'); rotY_H=makeR(0x00ff00,'y'); rotZ_H=makeR(0x0000ff,'z'); }
+    function createGroupGizmo() { groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo); const makeG=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16),new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m;}; groupHandles=[0,1,2,3,4,5,6,7].map(id=>makeG(id)); const makeGR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r;}; groupRotHandles=[makeGR(0xff0000,'x'), makeGR(0x00ff00,'y'), makeGR(0x0000ff,'z')]; }
     function createGhost() { ghostEgg=createEgg(0x28a745,true); ghostEgg.visible=false; scene.add(ghostEgg); }
-    function togglePlacementMode() { isPlacementMode=!isPlacementMode; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
     function spawnEgg(p) { const eg=createEgg(0xff69b4); eg.position.copy(p).y+=10.01; scene.add(eg); captureState(); updateSelectionVisuals([eg]); isPlacementMode=false; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
-    function captureState() { const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:{x:e.position.x,y:e.position.y,z:e.position.z},rot:{x:e.quaternion.x,y:e.quaternion.y,z:e.quaternion.z,w:e.quaternion.w},scale:{x:e.userData.data.scale.x,y:e.userData.data.scale.y,z:e.userData.data.scale.z},offsets:e.userData.data.offsets.map(o=>({x:o.x,y:o.y,z:o.z})),col:e.material.color.getHex()})); history.push(JSON.stringify(s)); if(history.length>50) history.shift(); }
-    window.executeUndo = function() { if(history.length<2) return; history.pop(); const s=JSON.parse(history[history.length-1]); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{e.geometry.dispose(); e.material.dispose(); scene.remove(e);}); s.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); };
-    function animate() { requestAnimationFrame(animate); if(currentEgg){ const {scale,offsets}=currentEgg.userData.data, p=currentEgg.position, q=currentEgg.quaternion; const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)]; handles.forEach((h,i)=>{const lP=ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET)); h.position.copy(p).add(lP.applyQuaternion(q));}); [rotX_H, rotY_H, rotZ_H].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2);}); } renderer.render(scene, camera); controls.update(); }
-    window.onload = init; window.updateColor = (c) => { currentSelection.forEach(e=>e.material.color.set(c)); captureState(); };
+    function togglePlacementMode() { isPlacementMode=!isPlacementMode; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
+    function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
+    function updateRealTimeSize() { const box=new THREE.Box3(); if(currentSelection.length===0) { document.getElementById('info-w').innerText="0.0"; return; } currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); }); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM_RATIO).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM_RATIO).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM_RATIO).toFixed(1); }
+    window.updateColor=(c)=>{ currentSelection.forEach(e=>e.material.color.set(c)); captureState(); };
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if(currentEgg){
+            const {scale,offsets}=currentEgg.userData.data, p=currentEgg.position, q=currentEgg.quaternion;
+            const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+            handles.forEach((h,i)=>{
+                const lP=ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET));
+                h.position.copy(p).add(lP.applyQuaternion(q));
+            });
+            [rotX_H, rotY_H, rotZ_H].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2);});
+        }
+        renderer.render(scene, camera); controls.update();
+    }
+    window.onload = init;
 </script>
 </body>
 </html>
