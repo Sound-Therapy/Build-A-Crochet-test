@@ -2,22 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.38.0 - Stabilized Engine</title>
+    <title>Build-A-Crochet v5.39.0 - Stability First</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
-        #panel { width: 110px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; }
-        .nav-group { display: flex; gap: 4px; margin-bottom: 10px; width: 90%; }
-        .nav-btn { flex: 1; height: 30px; cursor: pointer; background: #f0f0f0; border: 1px solid #bbb; border-radius: 4px; font-size: 16px; }
-        .file-btn { width: 90%; height: 28px; margin-bottom: 5px; font-size: 10px; font-weight: bold; cursor: pointer; background: #444; color: white; border: none; border-radius: 4px; }
-        .egg-btn { background: #ff69b4; border-radius: 50%; width: 50px; height: 60px; margin: 15px 0; cursor: pointer; border: 3px solid #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
-        #size-info { width: 90%; padding: 8px 4px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 10px; margin-bottom: 15px; box-sizing: border-box;}
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; }
+        
+        /* Navigation Group: Only Undo/Redo arrows as requested */
+        .nav-group { display: flex; gap: 5px; margin-bottom: 15px; width: 85%; justify-content: center; }
+        .nav-btn { flex: 1; height: 35px; cursor: pointer; background: #f5f5f5; border: 1px solid #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+        .nav-btn:hover { background: #fff; }
+        .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+        .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; margin: 15px 0; cursor: pointer; border: 2px solid #fff; }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 10px rgba(40,167,69,0.5); }
+        
+        #size-info { width: 85%; padding: 8px 4px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 10px; color: #333; margin-bottom: 15px; }
         .info-label { font-weight: bold; color: #ff69b4; border-bottom: 1px solid #ddd; margin-bottom: 4px; text-align: center; }
-        .val-row { display: flex; justify-content: space-between; padding: 0 5px;}
-        .pattern-btn { background: #007bff; color: white; width: 90%; height: 45px; margin-top: auto; margin-bottom: 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+        .val-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+
+        .pattern-btn { background: #007bff; color: white; width: 85%; height: 45px; margin-top: auto; margin-bottom: 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
         #canvas-container { flex-grow: 1; position: relative; }
-        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(5, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; }
-        .color-dot { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.1); }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
     </style>
 </head>
@@ -25,30 +30,24 @@
 
 <div id="panel">
     <div class="nav-group">
-        <button class="nav-btn" onclick="executeUndo()">⟲</button>
-        <button class="nav-btn" onclick="executeRedo()">⟳</button>
+        <button id="undo-btn" class="nav-btn" onclick="executeUndo()">⟲</button>
+        <button id="redo-btn" class="nav-btn" onclick="executeRedo()">⟳</button>
     </div>
-    <button class="file-btn" onclick="saveToFile()">💾 SAVE</button>
-    <button class="file-btn" onclick="triggerFileLoad()">📂 LOAD</button>
-    <input type="file" id="file-input" style="display:none" accept=".json" onchange="loadFromFile(event)">
+
     <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
+
     <div id="size-info">
         <div class="info-label">SIZE (cm)</div>
         <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
         <div class="val-row"><span>H:</span><span id="info-h">0.0</span></div>
         <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
     </div>
-    <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
+
+    <button class="pattern-btn">PATTERN</button>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet v5.38.0</div>
-    <div id="palette">
-        <script>
-            const colors = ['#ffffff','#000000','#ff0000','#ff69b4','#28a745','#007bff','#ffd43b','#fd7e14','#6f42c1','#85501d'];
-            colors.forEach(c => document.write(`<div class="color-dot" style="background:${c};" onclick="updateColor('${c}')"></div>`));
-        </script>
-    </div>
+    <div id="v-tag">Build-A-Crochet v5.39.0</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -58,7 +57,8 @@
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let handles = [], rotX_H, rotY_H, rotZ_H;
-    let currentSelection = [], history = [], redoStack = [];
+    let history = [], redoStack = []; // History Stacks
+    
     let startScale, startPos, startRotation, startIntersect = new THREE.Vector3(), worldAnchorPos = new THREE.Vector3();
     let lastMouseAngle = 0, startHandleDist = 1;
 
@@ -66,10 +66,10 @@
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
-        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 110) / window.innerHeight, 0.1, 1000);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 100) / window.innerHeight, 0.1, 1000);
         camera.position.set(60, 50, 80);
         renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth - 110, window.innerHeight);
+        renderer.setSize(window.innerWidth - 100, window.innerHeight);
         document.getElementById('canvas-container').appendChild(renderer.domElement);
         
         scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
@@ -83,10 +83,57 @@
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         
-        captureState(); animate();
+        captureState(); // 초기 상태 저장
+        animate();
     }
 
-    // --- [5.35.0 Base Engine Logic Re-integrated] ---
+    // --- [History Logic: Isolated from Engine] ---
+    function captureState() {
+        const state = scene.children.filter(o => o.userData.isEgg).map(e => ({
+            pos: e.position.clone(), rot: e.quaternion.clone(),
+            scale: e.userData.data.scale.clone(), offsets: e.userData.data.offsets.map(o => o.clone())
+        }));
+        const sStr = JSON.stringify(state);
+        if (history.length > 0 && history[history.length - 1] === sStr) return;
+        history.push(sStr); redoStack = [];
+        if (history.length > 30) history.shift();
+        updateHistoryButtons();
+    }
+
+    window.executeUndo = function() {
+        if (history.length < 2) return;
+        redoStack.push(history.pop());
+        applyState(history[history.length - 1]);
+        updateHistoryButtons();
+    };
+
+    window.executeRedo = function() {
+        if (redoStack.length === 0) return;
+        const s = redoStack.pop();
+        history.push(s);
+        applyState(s);
+        updateHistoryButtons();
+    };
+
+    function updateHistoryButtons() {
+        document.getElementById('undo-btn').disabled = history.length < 2;
+        document.getElementById('redo-btn').disabled = redoStack.length === 0;
+    }
+
+    function applyState(sStr) {
+        const data = JSON.parse(sStr);
+        scene.children.filter(o => o.userData.isEgg).forEach(e => { scene.remove(e); });
+        data.forEach(d => {
+            const eg = createEgg(0xff69b4);
+            eg.position.copy(d.pos); eg.quaternion.copy(d.rot);
+            eg.userData.data.scale.copy(d.scale);
+            eg.userData.data.offsets = d.offsets.map(o => new THREE.Vector3(o.x, o.y, o.z));
+            updateMesh(eg); scene.add(eg);
+        });
+        deselect();
+    }
+
+    // --- [v5.35.0 Pure Control Engine: DO NOT TOUCH] ---
     function createEgg(color, isGhost = false) {
         const points = []; for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
@@ -152,14 +199,10 @@
         }
 
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
-        if(eh.length>0) {
-            updateSelectionVisuals([eh[0].object]);
-            dragTarget = eh[0].object; isDragging = true; controls.enabled = false;
+        if(eh.length>0) { selectEgg(eh[0].object); dragTarget = eh[0].object; isDragging = true; controls.enabled = false; 
             const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             ray.ray.intersectPlane(pl, startIntersect);
-        } else {
-            updateSelectionVisuals([]);
-        }
+        } else { deselect(); }
     }
 
     function onMove(e) {
@@ -174,7 +217,6 @@
         }
 
         if(!isDragging || !dragTarget || !currentEgg) return;
-
         const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
         if(ray.ray.intersectPlane(pl, intersect)){
@@ -190,76 +232,27 @@
                 currentEgg.userData.data.scale.copy(startScale).multiplyScalar(r);
                 updateMesh(currentEgg);
             }
-            updateRealTimeSize();
+            updateUI();
         }
     }
 
     function onUp() { if(isDragging) captureState(); isDragging = false; dragTarget = null; controls.enabled = true; }
 
-    function spawnEgg(p) {
-        const eg = createEgg("#ff69b4"); eg.position.copy(p).y += 10.01;
-        scene.add(eg); captureState(); updateSelectionVisuals([eg]);
-        isPlacementMode = false; ghostEgg.visible = false;
-        document.getElementById('egg-spawn-btn').classList.remove('active');
-    }
+    function selectEgg(egg) { currentEgg = egg; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); updateUI(); }
+    function deselect() { currentEgg = null; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=false); updateUI(); }
+    function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
+    function togglePlacementMode() { isPlacementMode = !isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active'); }
+    function createGhost() { ghostEgg = createEgg(0x28a745, true); scene.add(ghostEgg); ghostEgg.visible = false; }
+    function spawnEgg(p) { const eg = createEgg(0xff69b4); eg.position.copy(p).y += 10.01; scene.add(eg); captureState(); selectEgg(eg); isPlacementMode = false; ghostEgg.visible = false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
 
-    // --- [Data & History] ---
-    function captureState() {
-        const s = scene.children.filter(o=>o.userData.isEgg).map(e=>({
-            pos: e.position.clone(), rot: e.quaternion.clone(), scale: e.userData.data.scale.clone(),
-            offsets: e.userData.data.offsets.map(o=>o.clone()), col: e.material.color.getHex()
-        }));
-        const str = JSON.stringify(s);
-        if(history.length>0 && history[history.length-1] === str) return;
-        history.push(str); redoStack = [];
-        if(history.length>40) history.shift();
-        localStorage.setItem('bac_v538_save', str);
-        updateHistoryButtons();
-    }
-
-    window.executeUndo = () => { if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]); updateHistoryButtons(); };
-    window.executeRedo = () => { if(redoStack.length===0) return; const s = redoStack.pop(); history.push(s); applyState(s); updateHistoryButtons(); };
-    function updateHistoryButtons() { document.querySelectorAll('.nav-btn').forEach((b,i)=> b.disabled = i===0?history.length<2:redoStack.length===0); }
-
-    function applyState(str) {
-        const data = JSON.parse(str);
-        scene.children.filter(o=>o.userData.isEgg).forEach(e=>{ scene.remove(e); });
-        data.forEach(d=>{
-            const eg = createEgg(new THREE.Color(d.col));
-            eg.position.copy(d.pos); eg.quaternion.copy(d.rot);
-            eg.userData.data.scale.copy(d.scale);
-            eg.userData.data.offsets = d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z));
-            updateMesh(eg); scene.add(eg);
-        });
-        updateSelectionVisuals([]);
-    }
-
-    window.saveToFile = () => { const b=new Blob([history[history.length-1]],{type:"application/json"}); const l=document.createElement("a"); l.href=URL.createObjectURL(b); l.download="project.json"; l.click(); };
-    window.triggerFileLoad = () => document.getElementById('file-input').click();
-    window.loadFromFile = (e) => { const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); };
-
-    // --- [Helpers] ---
-    function updateSelectionVisuals(sel) {
-        currentSelection = sel; currentEgg = sel.length === 1 ? sel[0] : null;
-        [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=> h.visible = !!currentEgg);
-        document.getElementById('palette').style.display = sel.length > 0 ? 'grid' : 'none';
-        updateRealTimeSize();
-    }
-
-    function updateRealTimeSize() {
+    function updateUI() {
         if(!currentEgg) { document.getElementById('info-w').innerText = "0.0"; return; }
-        const box = new THREE.Box3().setFromObject(currentEgg);
-        const sz = box.getSize(new THREE.Vector3());
+        const box = new THREE.Box3().setFromObject(currentEgg); const sz = box.getSize(new THREE.Vector3());
         document.getElementById('info-w').innerText = (sz.x*CM_RATIO).toFixed(1);
         document.getElementById('info-h').innerText = (sz.y*CM_RATIO).toFixed(1);
         document.getElementById('info-d').innerText = (sz.z*CM_RATIO).toFixed(1);
     }
 
-    function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
-    function togglePlacementMode() { isPlacementMode = !isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active'); }
-    function createGhost() { ghostEgg = createEgg(0x28a745, true); scene.add(ghostEgg); ghostEgg.visible = false; }
-    function updateColor(c) { currentSelection.forEach(e=>e.material.color.set(c)); captureState(); }
-    
     function animate() {
         requestAnimationFrame(animate);
         if(currentEgg){
