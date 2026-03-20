@@ -12,16 +12,16 @@
         .save-btn { background: #444; color: white; border: none; font-size: 10px; }
         .load-btn { background: #888; color: white; border: none; font-size: 10px; }
         .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; cursor: pointer; border: 2px solid #fff; }
+        .egg-btn.active { background: #28a745; }
         #size-info { width: 90%; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; box-sizing: border-box;}
         #canvas-container { flex-grow: 1; position: relative; }
-        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: red; font-size: 14px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
 <body>
-
 <div id="panel">
     <div class="top-btns">
         <div class="nav-row">
@@ -41,9 +41,8 @@
         </div>
     </div>
 </div>
-
 <div id="canvas-container">
-    <div id="v-tag">v5.48.11 (Modular)</div>
+    <div id="v-tag">v5.48.11 - MODULAR OK</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000','#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7','#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005','#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb','#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff','#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -52,12 +51,9 @@
     </div>
     <div id="select-box"></div>
 </div>
-
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-
 <script src="engine.js"></script>
 <script src="ui_logic.js"></script>
-
 </body>
 </html>
