@@ -33,15 +33,7 @@
     </style>
 </head>
 <body>
-<div id="modal-overlay" onclick="closeP2D()" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999;"></div>
-<div id="p2d-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace;">
-    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">P2D: Pattern to Design</div>
-    <textarea id="p2d-input" style="width:100%; height:150px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:12px; resize:none; border: 1px solid #ddd; border-radius: 4px;" placeholder="도안 내용을 여기에 붙여넣으세요..."></textarea>
-    <div style="display:flex; justify-content:space-between;">
-        <button onclick="closeP2D()" style="width:48%; padding:10px; cursor:pointer; border:1px solid #ccc; border-radius:6px; background:#f9f9f9;">취소</button>
-        <button onclick="processP2D()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; border-radius:6px; font-weight:bold; cursor:pointer;">해석하기</button>
-    </div>
-</div>
+
 <div id="modal-overlay" onclick="closeModal()"></div>
 <div id="pattern-modal">
     <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
@@ -83,9 +75,7 @@
             <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
         </div>
     </div>
-<button class="p2d-btn" onclick="openP2D()" style="width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top: 10px;">P2D</button>
-        </div>
-</div>    
+    
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
         <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
         <button class="p2d-btn" onclick="alert('P2D logic standby')">P2D</button>
