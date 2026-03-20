@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.29 - P2D Stable Engine</title>
+    <title>Build-A-Crochet v5.48.30 - Father's Original Physics</title>
     <style>
-        /* [아버님 원본 스타일 유지] */
+        /* 아버님 원본 스타일 100% 유지 */
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
         .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; }
@@ -20,45 +20,26 @@
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
         .pattern-btn { width: 85px; background: #007bff; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
         .p2d-btn { width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top:5px;}
-        .learn-btn { width: 85px; background: #dc3545; color: white; height: 35px; border: 2px solid #fff; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 9px; margin-top:5px;}
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
         
-        /* [모달 스타일] */
-        #pattern-modal, #p2d-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
+        /* P2D 전용 모달 스타일 추가 */
+        #p2d-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
         #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
     </style>
 </head>
 <body>
 
-<div id="modal-overlay" onclick="closeAllModals()"></div>
-
-<div id="pattern-modal">
-    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
-    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
-    <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box; font-family:monospace;">
-        <option value="medium_4" selected>4 Medium (4.5-5.5mm)</option>
-        <option value="fine_1">1 Super Fine</option>
-        <option value="bulky_5">5 Bulky</option>
-    </select>
-    <div style="display:flex; justify-content:space-between;">
-        <button onclick="closeAllModals()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
-        <button onclick="startAIAnalysis()" style="width:48%; padding:10px; background:#007bff; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
-    </div>
-</div>
-
+<div id="modal-overlay" onclick="closeP2D()"></div>
 <div id="p2d-modal">
     <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">P2D: Pattern to Design</div>
-    <div style="font-size:11px; color:#666; margin-bottom:10px;">Paste your crochet pattern below:</div>
-    <textarea id="p2d-input" style="width:100%; height:150px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:12px; resize:none;" placeholder="R1: Magic Ring 6&#10;R2: inc 6 (12)&#10;R3: sc, inc..."></textarea>
+    <textarea id="p2d-input" style="width:100%; height:150px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:12px;" placeholder="Paste Pattern Here..."></textarea>
     <div style="display:flex; justify-content:space-between;">
-        <button onclick="closeAllModals()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
-        <button onclick="processP2D()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold; cursor:pointer;">Interpret</button>
+        <button onclick="closeP2D()" style="width:48%; padding:10px;">Cancel</button>
+        <button onclick="processP2D()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold;">Interpret</button>
     </div>
 </div>
 
@@ -72,7 +53,7 @@
             <button class="util-btn save-btn" onclick="saveProject()">SAVE</button>
             <button class="util-btn load-btn" onclick="triggerFileSelect()">LOAD</button>
         </div>
-        <input type="file" id="file-input" style="display:none;" accept=".json" onchange="handleFileSelect(event)">
+        <input type="file" id="file-input" style="display:none;" onchange="handleFileSelect(event)">
         <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
         <div id="size-info">
             <div class="info-label">SIZE (cm)</div>
@@ -81,16 +62,14 @@
             <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
         </div>
     </div>
-    
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
-        <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
-        <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
-        <button class="learn-btn" onclick="alert('Deep Learn logic standby')">DEEP LEARN</button>
+        <button class="pattern-btn" onclick="alert('Pattern PDF export logic standby')">PATTERN</button>
+        <button class="p2d-btn" onclick="openP2D()">P2D</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.29</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.30</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -104,7 +83,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    // --- [ Core Global Variables ] ---
+    // --- [ 아버님 원본 변수 및 초기화 로직 ] ---
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
@@ -114,9 +93,6 @@
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], redoStack = [], currentSelection = [];
-    
-    const yarnWeights = { medium_4: {roundH: 0.38, label: "4 Medium"}, fine_1: {roundH: 0.22, label: "1 Super Fine"}, bulky_5: {roundH: 0.52, label: "5 Bulky"} };
-    const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
@@ -141,11 +117,10 @@
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', onKeyDown);
-        
         captureState(); animate();
     }
 
-    // --- [ Physics Engine (v5.48.11 Restoration) ] ---
+    // --- [ 5.47.0 Core Physics (아버님 강조 3.5제곱) ] ---
     function createEgg(color, isGhost = false) {
         const points = [];
         for (let i = 0; i <= 20; i++) {
@@ -167,7 +142,7 @@
             const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
             let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 3.5 power
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님 강조 3.5제곱
                 tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
             }
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
@@ -175,18 +150,16 @@
         pos.needsUpdate = true;
     }
 
-    // --- [ Interaction Logic (v5.48.11 Restoration) ] ---
+    // --- [ Drag & Interaction (앵커 포인트 로직 원본 그대로) ] ---
     function onDown(e) {
         if(e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-        
         if(isPlacementMode && e.button===0) {
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
             if(h.length>0) spawnEgg(h[0].point); return;
         }
-
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -209,20 +182,18 @@
                 startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
             } return;
         }
-
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
             if(e.button===0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
-            else if(e.button===0 && e.ctrlKey) {
-                const idx = currentSelection.indexOf(dragTarget);
-                if(idx > -1) updateSelectionVisuals(currentSelection.filter(x => x !== dragTarget));
-                else updateSelectionVisuals([...currentSelection, dragTarget]);
-            }
+            else if(e.button===0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
             const pl=new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             ray.ray.intersectPlane(pl, startIntersect);
             if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
-        } else if(e.button===0) { updateSelectionVisuals([]); controls.enabled=true; }
+        } else {
+            if(e.button===0){ updateSelectionVisuals([]); controls.enabled=true; }
+            else if(e.button===2){ isBoxSelecting=true; boxStart.set(e.clientX, e.clientY); selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px'; updateSelectionVisuals([]); controls.enabled=false; }
+        }
     }
 
     function onMove(e) {
@@ -231,8 +202,11 @@
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
         if(isPlacementMode){
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
-            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; }
-            else ghostEgg.visible=false;
+            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; } else ghostEgg.visible=false;
+        }
+        if(isBoxSelecting){
+            const x=Math.min(boxStart.x, e.clientX), y=Math.min(boxStart.y, e.clientY), w=Math.abs(e.clientX-boxStart.x), h=Math.abs(e.clientY-boxStart.y);
+            selectBoxEl.style.left=x+'px'; selectBoxEl.style.top=y+'px'; selectBoxEl.style.width=w+'px'; selectBoxEl.style.height=h+'px'; return;
         }
         if(!isDragging || !dragTarget) return;
         const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
@@ -251,7 +225,7 @@
                     const id=dragTarget.userData.id, data=currentEgg.userData.data;
                     if(mouseButton===0 && e.ctrlKey){
                         const ld=intersect.clone().sub(startIntersect).applyQuaternion(currentEgg.quaternion.clone().invert());
-                        data.offsets[id].copy(dragTarget.userData.startOffset).add(ld);
+                        data.offsets[id].copy(dragTarget.userData.startOffset).add(ld); updateMesh(currentEgg);
                     } else {
                         const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
                         if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
@@ -260,14 +234,39 @@
                             const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
                             const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
                             currentEgg.position.add(worldAnchorPos.clone().sub(co));
-                        }
-                    } updateMesh(currentEgg);
+                        } updateMesh(currentEgg);
+                    }
                 }
-            }
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                if(dragTarget.userData.isGroupHandle){
+                    const r=Math.max(0.01, intersect.distanceTo(c)/startHandleDist);
+                    currentSelection.forEach((e,i)=>{e.userData.data.scale.copy(startGroupData[i].scale).multiplyScalar(r); updateMesh(e); e.position.copy(c).add(startGroupData[i].pos.clone().sub(c).multiplyScalar(r));});
+                } else if(dragTarget.userData.isGroupRotationHandle){
+                    const da=getMouseAngle(e,{position:c})-lastMouseAngle;
+                    const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+                    const rq=new THREE.Quaternion().setFromAxisAngle(ax,-da);
+                    currentSelection.forEach(eg=>{eg.position.sub(c).applyQuaternion(rq).add(c); eg.quaternion.premultiply(rq);});
+                    lastMouseAngle+=da;
+                } updateGroupGizmoVisuals();
+            } updateRealTimeSize();
         }
     }
 
-    function onUp() { if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true; }
+    function onUp(e) {
+        if(isBoxSelecting){
+            isBoxSelecting=false; selectBoxEl.style.display='none';
+            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
+            const rect=renderer.domElement.getBoundingClientRect(); const selected = [];
+            scene.children.filter(o=>o.userData.isEgg).forEach(egg => {
+                const sp = egg.position.clone().project(camera);
+                const px = (sp.x + 1) * rect.width / 2 + rect.left, py = (-sp.y + 1) * rect.height / 2 + rect.top;
+                if(px >= x1 && px <= x2 && py >= y1 && py <= y2) selected.push(egg);
+            }); updateSelectionVisuals(selected);
+        }
+        if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true;
+    }
 
     function updateSelectionVisuals(sel) {
         currentSelection=sel; updateRealTimeSize();
@@ -279,28 +278,23 @@
         else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
     }
 
-    // --- [ P2D New Logic ] ---
-    window.openP2DModal = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
-    window.closeAllModals = () => { document.getElementById('pattern-modal').style.display='none'; document.getElementById('p2d-modal').style.display='none'; document.getElementById('modal-overlay').style.display='none'; };
-    
+    // --- [ P2D 인터페이스 ] ---
+    window.openP2D = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
+    window.closeP2D = () => { document.getElementById('p2d-modal').style.display='none'; document.getElementById('modal-overlay').style.display='none'; };
     window.processP2D = () => {
         const text = document.getElementById('p2d-input').value;
-        const lines = text.split('\n');
-        let totalRounds = 0;
-        lines.forEach(l => { if(l.toLowerCase().includes('round') || l.toLowerCase().startsWith('r')) totalRounds++; });
-        
-        if(totalRounds > 0) {
-            const newEgg = createEgg('#ff69b4');
-            const targetH = totalRounds * yarnWeights.medium_4.roundH / CM_RATIO;
-            newEgg.userData.data.scale.set(1, targetH/20, 1);
-            newEgg.position.set(0, targetH/2, 0);
-            scene.add(newEgg); updateMesh(newEgg); captureState(); updateSelectionVisuals([newEgg]);
-            alert(`${totalRounds} Rounds interpreted. New design spawned.`);
+        const rounds = (text.match(/Round|R\d+/gi) || []).length;
+        if(rounds > 0) {
+            const eg = createEgg('#ff69b4');
+            const targetH = rounds * 0.38 / CM_RATIO;
+            eg.userData.data.scale.set(1, targetH/20, 1);
+            eg.position.set(0, targetH/2, 0); scene.add(eg); updateMesh(eg);
+            captureState(); updateSelectionVisuals([eg]);
         }
-        closeAllModals();
+        closeP2D();
     };
 
-    // [Helper functions: createHandles, createGroupGizmo, updateGroupGizmoVisuals, createGhost, togglePlacementMode, spawnEgg, getMouseAngle, updateRealTimeSize, updateColor, executeUndo, executeRedo, updateNavButtons, onKeyDown, captureState, applyState, saveProject, triggerFileSelect, handleFileSelect, animate remain identical to your v5.48.11...]
+    // --- [ 나머지 아버님 원본 헬퍼 함수들 ] ---
     function createHandles() {
         const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;};
         handles=[0,1,2,3,4,5].map(id=>mkH(id));
