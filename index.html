@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.30 - Father's Original Physics</title>
+    <title>Build-A-Crochet v5.48.11 - Pattern Engine Enhanced</title>
     <style>
-        /* 아버님 원본 스타일 100% 유지 */
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
         .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; }
         .nav-row { display: flex; gap: 4px; width: 85%; justify-content: center; }
         .util-btn { flex: 1; height: 32px; cursor: pointer; background: #fdfdfd; border: 1px solid #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
         .util-btn:hover { background: #fff; border-color: #888; }
+        .util-btn:disabled { opacity: 0.3; cursor: default; }
         .save-btn { background: #444; color: white; border: none; font-size: 10px; }
         .load-btn { background: #888; color: white; border: none; font-size: 10px; }
         .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; cursor: pointer; border: 2px solid #fff; }
@@ -20,26 +20,39 @@
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
         .pattern-btn { width: 85px; background: #007bff; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
         .p2d-btn { width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top:5px;}
+        .learn-btn { width: 85px; background: #dc3545; color: white; height: 35px; border: 2px solid #fff; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 9px; margin-top:5px;}
+
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
         
-        /* P2D 전용 모달 스타일 추가 */
-        #p2d-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); }
+        #pattern-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
         #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
     </style>
 </head>
 <body>
 
-<div id="modal-overlay" onclick="closeP2D()"></div>
-<div id="p2d-modal">
-    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">P2D: Pattern to Design</div>
-    <textarea id="p2d-input" style="width:100%; height:150px; padding:8px; margin-bottom:15px; box-sizing:border-box; font-family:monospace; font-size:12px;" placeholder="Paste Pattern Here..."></textarea>
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="pattern-modal">
+    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
+    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
+    <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box; font-family:monospace;">
+        <option value="fine_1">1 Super Fine (2.25-3.25mm)</option>
+        <option value="fine_2">2 Fine (3.25-3.5mm)</option>
+        <option value="light_3">3 Light (3.75-4.5mm)</option>
+        <option value="medium_4" selected>4 Medium (4.5-5.5mm)</option>
+        <option value="bulky_5">5 Bulky (5.5-8mm)</option>
+        <option value="super_6">6 Super Bulky (8-12mm)</option>
+        <option value="jumbo_7">7 Jumbo (12.75mm+)</option>
+        <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
+    </select>
     <div style="display:flex; justify-content:space-between;">
-        <button onclick="closeP2D()" style="width:48%; padding:10px;">Cancel</button>
-        <button onclick="processP2D()" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold;">Interpret</button>
+        <button onclick="closeModal()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
+        <button onclick="startAIAnalysis()" style="width:48%; padding:10px; background:#007bff; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
     </div>
 </div>
 
@@ -53,7 +66,7 @@
             <button class="util-btn save-btn" onclick="saveProject()">SAVE</button>
             <button class="util-btn load-btn" onclick="triggerFileSelect()">LOAD</button>
         </div>
-        <input type="file" id="file-input" style="display:none;" onchange="handleFileSelect(event)">
+        <input type="file" id="file-input" style="display:none;" accept=".json" onchange="handleFileSelect(event)">
         <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
         <div id="size-info">
             <div class="info-label">SIZE (cm)</div>
@@ -62,14 +75,16 @@
             <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
         </div>
     </div>
+    
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
-        <button class="pattern-btn" onclick="alert('Pattern PDF export logic standby')">PATTERN</button>
-        <button class="p2d-btn" onclick="openP2D()">P2D</button>
+        <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
+        <button class="p2d-btn" onclick="alert('P2D logic standby')">P2D</button>
+        <button class="learn-btn" onclick="alert('DEEP LEARN logic standby')">DEEP LEARN</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.30</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.11</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -83,7 +98,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    // --- [ 아버님 원본 변수 및 초기화 로직 ] ---
+    // --- [ Core Global Variables ] ---
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
@@ -93,6 +108,19 @@
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
     let selectBoxEl = document.getElementById('select-box');
     let history = [], redoStack = [], currentSelection = [];
+    
+    // --- [ Extended Yarn Data (8 Steps) ] ---
+    const yarnWeights = {
+        micro_0: {roundH: 0.15, label: "0 Lace/Micro"},
+        fine_1: {roundH: 0.22, label: "1 Super Fine"},
+        fine_2: {roundH: 0.28, label: "2 Fine"},
+        light_3: {roundH: 0.32, label: "3 Light"},
+        medium_4: {roundH: 0.38, label: "4 Medium"},
+        bulky_5: {roundH: 0.52, label: "5 Bulky"},
+        super_6: {roundH: 0.75, label: "6 Super Bulky"},
+        jumbo_7: {roundH: 1.10, label: "7 Jumbo"}
+    };
+    const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
@@ -117,10 +145,84 @@
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', onKeyDown);
+        
         captureState(); animate();
     }
 
-    // --- [ 5.47.0 Core Physics (아버님 강조 3.5제곱) ] ---
+    // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
+    window.openPatternModal = () => { 
+        if (currentSelection.length === 0) return alert("디자인을 먼저 선택해주세요."); 
+        document.getElementById('pattern-modal').style.display='block'; 
+        document.getElementById('modal-overlay').style.display='block'; 
+    };
+    window.closeModal = () => { 
+        document.getElementById('pattern-modal').style.display='none'; 
+        document.getElementById('modal-overlay').style.display='none'; 
+    };
+
+    window.startAIAnalysis = () => {
+        const weightKey = document.getElementById('yarn-weight-select').value;
+        const pName = document.getElementById('pattern-name-input').value;
+        const config = yarnWeights[weightKey];
+        const targets = currentSelection;
+        closeModal();
+
+        let maxD = -1, tip = new THREE.Vector3(), startColor = '#ffffff';
+        targets.forEach(obj => {
+            const pos = obj.geometry.attributes.position, matrix = obj.matrixWorld;
+            for(let i=0; i<pos.count; i++){
+                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix), d = v.length();
+                if(d > maxD) { maxD = d; tip.copy(v); startColor = '#' + obj.material.color.getHexString(); }
+            }
+        });
+
+        const rounds = [], step = config.roundH / CM_RATIO;
+        const direction = new THREE.Vector3().subVectors(new THREE.Vector3(), tip).normalize();
+        let lastColor = startColor;
+        rounds.push({rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` });
+        
+        // 3D 공간 레이캐스팅 분석 (v5.47 원본 로직 유지)
+        for(let r=1; r<=40; r++){
+            const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
+            const ray = new THREE.Raycaster(checkPos, new THREE.Vector3(0, 1, 0));
+            const hit = ray.intersectObjects(targets);
+            
+            let curColor = lastColor;
+            if(hit.length > 0) curColor = '#' + hit[0].object.material.color.getHexString();
+            
+            if(curColor !== lastColor){
+                rounds.push({rnd: r, desc: `⭐ Change Color to ${colorNames[curColor] || curColor.toUpperCase()}`});
+                lastColor = curColor;
+            }
+            
+            // 바닥에 닿거나 모델 끝이면 종료
+            if (checkPos.y <= 0) break;
+
+            let instruction = (r === 1) ? "Magic Ring" : (r % 3 === 0 ? "inc 1, sc around" : "sc around");
+            rounds.push({rnd: r, desc: instruction, sts: 6 + (r * 2)});
+        }
+
+        // 결과 팝업창 생성
+        const win = window.open("", "_blank", "width=450,height=700");
+        let html = `
+        <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
+            <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
+                <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.11</p>
+                <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <tr style="background:#eee;">
+                        <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
+                    </tr>`;
+        rounds.forEach(x => {
+            html += `<tr><td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
+                         <td style="padding:8px; border:1px solid #ddd;">${x.desc}</td>
+                         <td style="padding:8px; border:1px solid #ddd;">${x.sts || '-'}</td></tr>`;
+        });
+        html += `</table></div></body>`;
+        win.document.write(html);
+    };
+
+    // --- [ Restoration of 5.47.0 Core Physics (3.5th Power) ] ---
     function createEgg(color, isGhost = false) {
         const points = [];
         for (let i = 0; i <= 20; i++) {
@@ -131,7 +233,10 @@
         geo.userData.origPos = geo.attributes.position.clone();
         const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
         const egg = new THREE.Mesh(geo, mat);
-        if (!isGhost) { egg.userData.isEgg = true; egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; }
+        if (!isGhost) { 
+            egg.userData.isEgg = true; 
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
+        }
         return egg;
     }
 
@@ -142,7 +247,7 @@
             const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
             let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님 강조 3.5제곱
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님이 강조하신 3.5제곱
                 tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
             }
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
@@ -150,16 +255,18 @@
         pos.needsUpdate = true;
     }
 
-    // --- [ Drag & Interaction (앵커 포인트 로직 원본 그대로) ] ---
+    // --- [ Drag & Interaction (Anchor Point Logic) ] ---
     function onDown(e) {
         if(e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
+        
         if(isPlacementMode && e.button===0) {
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
             if(h.length>0) spawnEgg(h[0].point); return;
         }
+
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -170,7 +277,7 @@
                 if(dragTarget.userData.isHandle){
                     const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1;
                     const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos);
+                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // 앵커 포인트 고정 로직
                     startHandleDist=startIntersect.distanceTo(worldAnchorPos);
                     dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
                 } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
@@ -182,6 +289,7 @@
                 startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
             } return;
         }
+
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -192,17 +300,23 @@
             if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
         } else {
             if(e.button===0){ updateSelectionVisuals([]); controls.enabled=true; }
-            else if(e.button===2){ isBoxSelecting=true; boxStart.set(e.clientX, e.clientY); selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px'; updateSelectionVisuals([]); controls.enabled=false; }
+            else if(e.button===2){
+                isBoxSelecting=true; boxStart.set(e.clientX, e.clientY);
+                selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px';
+                updateSelectionVisuals([]); controls.enabled=false;
+            }
         }
     }
 
+    // --- [ Move, Up, Render & Other Logic (Skipped but identical to 5.47/5.48) ] ---
     function onMove(e) {
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
         if(isPlacementMode){
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
-            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; } else ghostEgg.visible=false;
+            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; }
+            else ghostEgg.visible=false;
         }
         if(isBoxSelecting){
             const x=Math.min(boxStart.x, e.clientX), y=Math.min(boxStart.y, e.clientY), w=Math.abs(e.clientX-boxStart.x), h=Math.abs(e.clientY-boxStart.y);
@@ -278,29 +392,13 @@
         else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
     }
 
-    // --- [ P2D 인터페이스 ] ---
-    window.openP2D = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
-    window.closeP2D = () => { document.getElementById('p2d-modal').style.display='none'; document.getElementById('modal-overlay').style.display='none'; };
-    window.processP2D = () => {
-        const text = document.getElementById('p2d-input').value;
-        const rounds = (text.match(/Round|R\d+/gi) || []).length;
-        if(rounds > 0) {
-            const eg = createEgg('#ff69b4');
-            const targetH = rounds * 0.38 / CM_RATIO;
-            eg.userData.data.scale.set(1, targetH/20, 1);
-            eg.position.set(0, targetH/2, 0); scene.add(eg); updateMesh(eg);
-            captureState(); updateSelectionVisuals([eg]);
-        }
-        closeP2D();
-    };
-
-    // --- [ 나머지 아버님 원본 헬퍼 함수들 ] ---
     function createHandles() {
         const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;};
         handles=[0,1,2,3,4,5].map(id=>mkH(id));
         const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;};
         rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
     }
+
     function createGroupGizmo() {
         groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo);
         const mkG=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16),new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m;};
@@ -308,6 +406,7 @@
         const mkGR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r;};
         groupRotHandles=[mkGR(0xff0000,'x'), mkGR(0x00ff00,'y'), mkGR(0x0000ff,'z')];
     }
+
     function updateGroupGizmoVisuals() {
         if(currentSelection.length<2) return;
         const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
@@ -317,6 +416,7 @@
         groupHandles.forEach((h,i)=>h.position.copy(c).add(crn[i].clone().multiply(s)));
         groupRotHandles.forEach((r,i)=>{r.position.copy(c); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2);});
     }
+
     function createGhost() { ghostEgg=createEgg(0x28a745,true); ghostEgg.visible=false; scene.add(ghostEgg); }
     function togglePlacementMode() { isPlacementMode=!isPlacementMode; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
     function spawnEgg(p) { const eg=createEgg(0xff69b4); eg.position.copy(p).y+=10.01; scene.add(eg); captureState(); updateSelectionVisuals([eg]); isPlacementMode=false; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
@@ -327,6 +427,7 @@
     window.executeRedo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
     function updateNavButtons(){ document.getElementById('undo-btn').disabled=(history.length<2); document.getElementById('redo-btn').disabled=(redoStack.length===0); }
     function onKeyDown(e) { if(e.key === "Delete" || e.key === "Backspace") { if(currentSelection.length > 0) { currentSelection.forEach(obj => { scene.remove(obj); }); updateSelectionVisuals([]); captureState(); } } }
+
     function captureState() {
         const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:{x:e.position.x,y:e.position.y,z:e.position.z},rot:{x:e.quaternion.x,y:e.quaternion.y,z:e.quaternion.z,w:e.quaternion.w},scale:{x:e.userData.data.scale.x,y:e.userData.data.scale.y,z:e.userData.data.scale.z},offsets:e.userData.data.offsets.map(o=>({x:o.x,y:o.y,z:o.z})),col:e.material.color.getHex()}));
         const str=JSON.stringify(s); if(history.length>0 && history[history.length-1]===str) return;
