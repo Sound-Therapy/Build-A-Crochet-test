@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet Engine v5.33.6</title>
+    <title>Build-A-Crochet Engine v5.33.7</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 20px; z-index: 100; box-sizing: border-box; }
@@ -10,7 +10,6 @@
         .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; }
         .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
         .undo-btn { background: #333; color: white; height: 40px; }
-        .del-btn { background: #dc3545; color: white; height: 40px; }
         #size-info { width: 90%; margin-top: 20px; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; }
         .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
@@ -18,7 +17,6 @@
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); transition: transform 0.1s; }
-        .color-dot:hover { transform: scale(1.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.1); position: absolute; pointer-events: none; display: none; z-index: 300; }
     </style>
 </head>
@@ -26,7 +24,6 @@
 
 <div id="panel">
     <div class="btn undo-btn" onclick="executeUndo()">UNDO</div>
-    <div class="btn del-btn" onclick="deleteSelected()">DEL</div>
     <div id="egg-spawn-btn" class="btn egg-btn" onclick="togglePlacementMode()"></div>
     <div id="size-info">
         <div class="info-label">SIZE (cm)</div>
@@ -37,7 +34,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.33.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.33.7</div>
     <div id="palette">
         <script>
             const cols = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -84,13 +81,15 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
-        // ⭐ v5.33.6: 키보드 삭제 이벤트 리스너 추가
-        window.addEventListener('keydown', (e) => { if(e.key === "Delete" || e.key === "Backspace") deleteSelected(); });
+        
+        // v5.33.7: 단축키 삭제 로직 유지
+        window.addEventListener('keydown', (e) => { 
+            if(e.key === "Delete" || e.key === "Backspace") deleteSelected(); 
+        });
         
         captureState(); animate();
     }
 
-    // [v5.33.0 엔진 로직 보존]
     function createEgg(color, isGhost = false) {
         const points = []; 
         for (let i = 0; i <= 20; i++) {
@@ -125,8 +124,7 @@
         pos.needsUpdate = true;
     }
 
-    // ⭐ v5.33.6: 삭제 기능 구현
-    window.deleteSelected = function() {
+    function deleteSelected() {
         if (currentSelection.length === 0) return;
         currentSelection.forEach(egg => {
             egg.geometry.dispose();
@@ -134,8 +132,8 @@
             scene.remove(egg);
         });
         updateSelectionVisuals([]);
-        captureState(); // 상태 저장하여 UNDO 가능하게 함
-    };
+        captureState(); 
+    }
 
     function updateRealTimeSize() {
         const wSpan = document.getElementById('info-w'), hSpan = document.getElementById('info-h'), dSpan = document.getElementById('info-d');
