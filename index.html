@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.15 - Full Engine Restored</title>
+    <title>Build-A-Crochet v5.48.11 - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -20,31 +20,39 @@
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
         .pattern-btn { width: 85px; background: #007bff; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
         .p2d-btn { width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top:5px;}
-        
+        .learn-btn { width: 85px; background: #dc3545; color: white; height: 35px; border: 2px solid #fff; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 9px; margin-top:5px;}
+
         #canvas-container { flex-grow: 1; position: relative; }
         #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
         #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
         .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
         #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
         
-        .modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
+        #pattern-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
         #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
     </style>
 </head>
 <body>
 
-<div id="modal-overlay" onclick="closeAllModals()"></div>
-
-<div id="p2d-modal" class="modal">
-    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#6f42c1;">P2D: 디자인 생성</div>
-    <div style="font-size:11px; color:#666; margin-bottom:5px;">실 선택 (Yarn Weight)</div>
-    <select id="p2d-yarn-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box;">
-        <option value="micro_0">0 Lace</option><option value="fine_1">1 Super Fine</option><option value="fine_2">2 Fine</option><option value="light_3">3 Light</option>
-        <option value="medium_4" selected>4 Medium</option><option value="bulky_5">5 Bulky</option><option value="super_6">6 Super Bulky</option><option value="jumbo_7">7 Jumbo</option>
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="pattern-modal">
+    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
+    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
+    <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box; font-family:monospace;">
+        <option value="fine_1">1 Super Fine (2.25-3.25mm)</option>
+        <option value="fine_2">2 Fine (3.25-3.5mm)</option>
+        <option value="light_3">3 Light (3.75-4.5mm)</option>
+        <option value="medium_4" selected>4 Medium (4.5-5.5mm)</option>
+        <option value="bulky_5">5 Bulky (5.5-8mm)</option>
+        <option value="super_6">6 Super Bulky (8-12mm)</option>
+        <option value="jumbo_7">7 Jumbo (12.75mm+)</option>
+        <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
     </select>
     <div style="display:flex; justify-content:space-between;">
-        <button onclick="closeAllModals()" style="width:48%; padding:10px;">취소</button>
-        <button onclick="alert('P2D 디자인 엔진 구동 준비!'); closeAllModals();" style="width:48%; padding:10px; background:#6f42c1; color:white; border:none; font-weight:bold;">디자인 생성</button>
+        <button onclick="closeModal()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
+        <button onclick="startAIAnalysis()" style="width:48%; padding:10px; background:#007bff; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
     </div>
 </div>
 
@@ -58,7 +66,7 @@
             <button class="util-btn save-btn" onclick="saveProject()">SAVE</button>
             <button class="util-btn load-btn" onclick="triggerFileSelect()">LOAD</button>
         </div>
-        <input type="file" id="file-input" style="display:none;" onchange="handleFileSelect(event)">
+        <input type="file" id="file-input" style="display:none;" accept=".json" onchange="handleFileSelect(event)">
         <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
         <div id="size-info">
             <div class="info-label">SIZE (cm)</div>
@@ -69,13 +77,14 @@
     </div>
     
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
-        <button class="pattern-btn" onclick="alert('패턴 생성 대기')">PATTERN</button>
-        <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
+        <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
+        <button class="p2d-btn" onclick="alert('P2D logic standby')">P2D</button>
+        <button class="learn-btn" onclick="alert('DEEP LEARN logic standby')">DEEP LEARN</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.15</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.11</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -89,15 +98,29 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
 <script>
-    // --- [ 5.48.11 핵심 엔진 로직 100% 복원 ] ---
+    // --- [ Core Global Variables ] ---
     let scene, camera, renderer, controls, currentEgg, ghostEgg;
     let isPlacementMode = false, dragTarget = null, isDragging = false;
-    let rotX_H, rotY_H, rotZ_H, handles = [], groupGizmo, groupHandles = [], groupRotHandles = [];
+    let rotX_H, rotY_H, rotZ_H, handles = [];
+    let groupGizmo, groupHandles = [], groupRotHandles = [];
     let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
     let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
-    let isBoxSelecting = false, boxStart = new THREE.Vector2(), selectBoxEl = document.getElementById('select-box');
+    let isBoxSelecting = false, boxStart = new THREE.Vector2();
+    let selectBoxEl = document.getElementById('select-box');
     let history = [], redoStack = [], currentSelection = [];
     
+    // --- [ Extended Yarn Data (8 Steps) ] ---
+    const yarnWeights = {
+        micro_0: {roundH: 0.15, label: "0 Lace/Micro"},
+        fine_1: {roundH: 0.22, label: "1 Super Fine"},
+        fine_2: {roundH: 0.28, label: "2 Fine"},
+        light_3: {roundH: 0.32, label: "3 Light"},
+        medium_4: {roundH: 0.38, label: "4 Medium"},
+        bulky_5: {roundH: 0.52, label: "5 Bulky"},
+        super_6: {roundH: 0.75, label: "6 Super Bulky"},
+        jumbo_7: {roundH: 1.10, label: "7 Jumbo"}
+    };
+    const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
     function init() {
@@ -121,15 +144,85 @@
         window.addEventListener('pointerdown', onDown);
         window.addEventListener('pointermove', onMove);
         window.addEventListener('pointerup', onUp);
+        window.addEventListener('keydown', onKeyDown);
         
         captureState(); animate();
     }
 
-    // --- [ UI 제어부 ] ---
-    window.openP2DModal = () => { document.getElementById('p2d-modal').style.display='block'; document.getElementById('modal-overlay').style.display='block'; };
-    window.closeAllModals = () => { document.getElementById('p2d-modal').style.display='none'; document.getElementById('modal-overlay').style.display='none'; };
+    // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
+    window.openPatternModal = () => { 
+        if (currentSelection.length === 0) return alert("디자인을 먼저 선택해주세요."); 
+        document.getElementById('pattern-modal').style.display='block'; 
+        document.getElementById('modal-overlay').style.display='block'; 
+    };
+    window.closeModal = () => { 
+        document.getElementById('pattern-modal').style.display='none'; 
+        document.getElementById('modal-overlay').style.display='none'; 
+    };
 
-    // --- [ 물리 엔진 및 변형 로직 (복원됨) ] ---
+    window.startAIAnalysis = () => {
+        const weightKey = document.getElementById('yarn-weight-select').value;
+        const pName = document.getElementById('pattern-name-input').value;
+        const config = yarnWeights[weightKey];
+        const targets = currentSelection;
+        closeModal();
+
+        let maxD = -1, tip = new THREE.Vector3(), startColor = '#ffffff';
+        targets.forEach(obj => {
+            const pos = obj.geometry.attributes.position, matrix = obj.matrixWorld;
+            for(let i=0; i<pos.count; i++){
+                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix), d = v.length();
+                if(d > maxD) { maxD = d; tip.copy(v); startColor = '#' + obj.material.color.getHexString(); }
+            }
+        });
+
+        const rounds = [], step = config.roundH / CM_RATIO;
+        const direction = new THREE.Vector3().subVectors(new THREE.Vector3(), tip).normalize();
+        let lastColor = startColor;
+        rounds.push({rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` });
+        
+        // 3D 공간 레이캐스팅 분석 (v5.47 원본 로직 유지)
+        for(let r=1; r<=40; r++){
+            const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
+            const ray = new THREE.Raycaster(checkPos, new THREE.Vector3(0, 1, 0));
+            const hit = ray.intersectObjects(targets);
+            
+            let curColor = lastColor;
+            if(hit.length > 0) curColor = '#' + hit[0].object.material.color.getHexString();
+            
+            if(curColor !== lastColor){
+                rounds.push({rnd: r, desc: `⭐ Change Color to ${colorNames[curColor] || curColor.toUpperCase()}`});
+                lastColor = curColor;
+            }
+            
+            // 바닥에 닿거나 모델 끝이면 종료
+            if (checkPos.y <= 0) break;
+
+            let instruction = (r === 1) ? "Magic Ring" : (r % 3 === 0 ? "inc 1, sc around" : "sc around");
+            rounds.push({rnd: r, desc: instruction, sts: 6 + (r * 2)});
+        }
+
+        // 결과 팝업창 생성
+        const win = window.open("", "_blank", "width=450,height=700");
+        let html = `
+        <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
+            <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
+                <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.11</p>
+                <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <tr style="background:#eee;">
+                        <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
+                    </tr>`;
+        rounds.forEach(x => {
+            html += `<tr><td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
+                         <td style="padding:8px; border:1px solid #ddd;">${x.desc}</td>
+                         <td style="padding:8px; border:1px solid #ddd;">${x.sts || '-'}</td></tr>`;
+        });
+        html += `</table></div></body>`;
+        win.document.write(html);
+    };
+
+    // --- [ Restoration of 5.47.0 Core Physics (3.5th Power) ] ---
     function createEgg(color, isGhost = false) {
         const points = [];
         for (let i = 0; i <= 20; i++) {
@@ -140,7 +233,10 @@
         geo.userData.origPos = geo.attributes.position.clone();
         const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
         const egg = new THREE.Mesh(geo, mat);
-        if (!isGhost) { egg.userData.isEgg = true; egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; }
+        if (!isGhost) { 
+            egg.userData.isEgg = true; 
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
+        }
         return egg;
     }
 
@@ -151,7 +247,7 @@
             const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
             let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 3.5제곱 물리 엔진 복구
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님이 강조하신 3.5제곱
                 tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
             }
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
@@ -159,12 +255,18 @@
         pos.needsUpdate = true;
     }
 
+    // --- [ Drag & Interaction (Anchor Point Logic) ] ---
     function onDown(e) {
         if(e.target.tagName !== 'CANVAS') return;
         const rect = renderer.domElement.getBoundingClientRect();
         const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
         const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
-        if(isPlacementMode && e.button===0) { const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper")); if(h.length>0) spawnEgg(h[0].point); return; }
+        
+        if(isPlacementMode && e.button===0) {
+            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
+            if(h.length>0) spawnEgg(h[0].point); return;
+        }
+
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
@@ -173,61 +275,121 @@
             if(currentEgg){
                 startRotation=currentEgg.quaternion.clone(); startPos=currentEgg.position.clone(); startScale=currentEgg.userData.data.scale.clone();
                 if(dragTarget.userData.isHandle){
-                    const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1, ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // 앵커 포인트 복구
+                    const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1;
+                    const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // 앵커 포인트 고정 로직
                     startHandleDist=startIntersect.distanceTo(worldAnchorPos);
+                    dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
                 } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
                 lastMouseAngle=getMouseAngle(e,currentEgg);
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                startGroupData=currentSelection.map(e=>({pos:e.position.clone(),scale:e.userData.data.scale.clone(),rot:e.quaternion.clone()}));
+                startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
             } return;
         }
+
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
-            if(e.button===0) updateSelectionVisuals([dragTarget]);
+            if(e.button===0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
+            else if(e.button===0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
             const pl=new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             ray.ray.intersectPlane(pl, startIntersect);
-        } else { if(e.button===0) updateSelectionVisuals([]); }
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
+        } else {
+            if(e.button===0){ updateSelectionVisuals([]); controls.enabled=true; }
+            else if(e.button===2){
+                isBoxSelecting=true; boxStart.set(e.clientX, e.clientY);
+                selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px';
+                updateSelectionVisuals([]); controls.enabled=false;
+            }
+        }
     }
 
+    // --- [ Move, Up, Render & Other Logic (Skipped but identical to 5.47/5.48) ] ---
     function onMove(e) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
         if(isPlacementMode){
-            const rect = renderer.domElement.getBoundingClientRect();
-            const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
-            const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
             const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
-            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; } else ghostEgg.visible=false;
+            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; }
+            else ghostEgg.visible=false;
+        }
+        if(isBoxSelecting){
+            const x=Math.min(boxStart.x, e.clientX), y=Math.min(boxStart.y, e.clientY), w=Math.abs(e.clientX-boxStart.x), h=Math.abs(e.clientY-boxStart.y);
+            selectBoxEl.style.left=x+'px'; selectBoxEl.style.top=y+'px'; selectBoxEl.style.width=w+'px'; selectBoxEl.style.height=h+'px'; return;
         }
         if(!isDragging || !dragTarget) return;
         const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
         let intersect = new THREE.Vector3();
-        const ray = new THREE.Raycaster();
-        const rect = renderer.domElement.getBoundingClientRect();
-        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
-        ray.setFromCamera(m, camera);
         if(ray.ray.intersectPlane(pl, intersect)){
-            if(currentEgg){
-                if(dragTarget.userData.isHandle){
-                    const id=dragTarget.userData.id, data=currentEgg.userData.data;
-                    const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
-                    if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
-                    else if(mouseButton===2){
-                        const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
-                        const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
-                        const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-                        currentEgg.position.add(worldAnchorPos.clone().sub(co));
-                    } updateMesh(currentEgg);
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget) && mouseButton===0 && !dragTarget.userData.isHandle && !dragTarget.userData.isGroupHandle){
+                currentSelection.forEach((eg,i)=>eg.position.copy(intersect).add(startGroupData[i].offset));
+                updateGroupGizmoVisuals();
+            } else if(currentEgg){
+                if(dragTarget.userData.isRotationHandle){
+                    const ang=getMouseAngle(e,currentEgg), da=ang-lastMouseAngle;
+                    const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+                    currentEgg.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(ax,-da)); lastMouseAngle=ang;
                 } else if(dragTarget.userData.isEgg) dragTarget.position.copy(intersect);
+                else if(dragTarget.userData.isHandle){
+                    const id=dragTarget.userData.id, data=currentEgg.userData.data;
+                    if(mouseButton===0 && e.ctrlKey){
+                        const ld=intersect.clone().sub(startIntersect).applyQuaternion(currentEgg.quaternion.clone().invert());
+                        data.offsets[id].copy(dragTarget.userData.startOffset).add(ld); updateMesh(currentEgg);
+                    } else {
+                        const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
+                        if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
+                        else if(mouseButton===2){
+                            const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
+                            const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
+                            const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                            currentEgg.position.add(worldAnchorPos.clone().sub(co));
+                        } updateMesh(currentEgg);
+                    }
+                }
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                if(dragTarget.userData.isGroupHandle){
+                    const r=Math.max(0.01, intersect.distanceTo(c)/startHandleDist);
+                    currentSelection.forEach((e,i)=>{e.userData.data.scale.copy(startGroupData[i].scale).multiplyScalar(r); updateMesh(e); e.position.copy(c).add(startGroupData[i].pos.clone().sub(c).multiplyScalar(r));});
+                } else if(dragTarget.userData.isGroupRotationHandle){
+                    const da=getMouseAngle(e,{position:c})-lastMouseAngle;
+                    const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+                    const rq=new THREE.Quaternion().setFromAxisAngle(ax,-da);
+                    currentSelection.forEach(eg=>{eg.position.sub(c).applyQuaternion(rq).add(c); eg.quaternion.premultiply(rq);});
+                    lastMouseAngle+=da;
+                } updateGroupGizmoVisuals();
             } updateRealTimeSize();
         }
     }
 
-    function onUp() { if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true; }
+    function onUp(e) {
+        if(isBoxSelecting){
+            isBoxSelecting=false; selectBoxEl.style.display='none';
+            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
+            const rect=renderer.domElement.getBoundingClientRect(); const selected = [];
+            scene.children.filter(o=>o.userData.isEgg).forEach(egg => {
+                const sp = egg.position.clone().project(camera);
+                const px = (sp.x + 1) * rect.width / 2 + rect.left, py = (-sp.y + 1) * rect.height / 2 + rect.top;
+                if(px >= x1 && px <= x2 && py >= y1 && py <= y2) selected.push(egg);
+            }); updateSelectionVisuals(selected);
+        }
+        if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true;
+    }
 
     function updateSelectionVisuals(sel) {
         currentSelection=sel; updateRealTimeSize();
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false);
         groupGizmo.visible=false; document.getElementById('palette').style.display='none';
-        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); document.getElementById('palette').style.display='grid'; } else currentEgg=null;
+        if(sel.length===0){ currentEgg=null; return; }
+        document.getElementById('palette').style.display='grid';
+        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); }
+        else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
     }
 
     function createHandles() {
@@ -237,20 +399,44 @@
         rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
     }
 
-    function createGroupGizmo() { groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo); }
+    function createGroupGizmo() {
+        groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo);
+        const mkG=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16),new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m;};
+        groupHandles=[0,1,2,3,4,5,6,7].map(id=>mkG(id));
+        const mkGR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r;};
+        groupRotHandles=[mkGR(0xff0000,'x'), mkGR(0x00ff00,'y'), mkGR(0x0000ff,'z')];
+    }
+
+    function updateGroupGizmoVisuals() {
+        if(currentSelection.length<2) return;
+        const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+        const c=b.getCenter(new THREE.Vector3()), s=b.getSize(new THREE.Vector3());
+        const hb=new THREE.Mesh(new THREE.BoxGeometry(s.x,s.y,s.z)); hb.position.copy(c); groupGizmo.update(hb);
+        const crn=[new THREE.Vector3(-0.5,0.5,0.5),new THREE.Vector3(-0.5,0.5,-0.5),new THREE.Vector3(-0.5,-0.5,0.5),new THREE.Vector3(-0.5,-0.5,-0.5),new THREE.Vector3(0.5,0.5,0.5),new THREE.Vector3(0.5,0.5,-0.5),new THREE.Vector3(0.5,-0.5,0.5),new THREE.Vector3(0.5,-0.5,-0.5)];
+        groupHandles.forEach((h,i)=>h.position.copy(c).add(crn[i].clone().multiply(s)));
+        groupRotHandles.forEach((r,i)=>{r.position.copy(c); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2);});
+    }
+
     function createGhost() { ghostEgg=createEgg(0x28a745,true); ghostEgg.visible=false; scene.add(ghostEgg); }
-    function togglePlacementMode() { isPlacementMode=!isPlacementMode; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
+    function togglePlacementMode() { isPlacementMode=!isPlacementMode; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
     function spawnEgg(p) { const eg=createEgg(0xff69b4); eg.position.copy(p).y+=10.01; scene.add(eg); captureState(); updateSelectionVisuals([eg]); isPlacementMode=false; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
     function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
-    function updateRealTimeSize() { const box=new THREE.Box3(); if(currentSelection.length===0) return; currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); }); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM_RATIO).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM_RATIO).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM_RATIO).toFixed(1); }
+    function updateRealTimeSize() { const box=new THREE.Box3(); if(currentSelection.length===0) { document.getElementById('info-w').innerText="0.0"; return; } currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); }); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM_RATIO).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM_RATIO).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM_RATIO).toFixed(1); }
     window.updateColor=(c)=>{ currentSelection.forEach(e=>e.material.color.set(c)); captureState(); };
     window.executeUndo=()=>{if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]);};
     window.executeRedo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
-    function captureState() { const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:e.position.clone(),rot:e.quaternion.clone(),scale:e.userData.data.scale.clone(),offsets:e.userData.data.offsets.map(o=>o.clone()),col:e.material.color.getHex()})); history.push(JSON.stringify(s)); redoStack=[]; updateNavButtons(); }
-    function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>scene.remove(e)); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.copy(d.pos); e.quaternion.copy(d.rot); e.userData.data.scale.copy(d.scale); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e){} }
     function updateNavButtons(){ document.getElementById('undo-btn').disabled=(history.length<2); document.getElementById('redo-btn').disabled=(redoStack.length===0); }
-    function saveProject(){ /* JSON Save logic */ }
-    function triggerFileSelect(){ document.getElementById('file-input').click(); }
+    function onKeyDown(e) { if(e.key === "Delete" || e.key === "Backspace") { if(currentSelection.length > 0) { currentSelection.forEach(obj => { scene.remove(obj); }); updateSelectionVisuals([]); captureState(); } } }
+
+    function captureState() {
+        const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:{x:e.position.x,y:e.position.y,z:e.position.z},rot:{x:e.quaternion.x,y:e.quaternion.y,z:e.quaternion.z,w:e.quaternion.w},scale:{x:e.userData.data.scale.x,y:e.userData.data.scale.y,z:e.userData.data.scale.z},offsets:e.userData.data.offsets.map(o=>({x:o.x,y:o.y,z:o.z})),col:e.material.color.getHex()}));
+        const str=JSON.stringify(s); if(history.length>0 && history[history.length-1]===str) return;
+        history.push(str); redoStack=[]; if(history.length>40) history.shift(); updateNavButtons();
+    }
+    function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{scene.remove(e);}); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e) {} }
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.48_${Date.now()}.json`; a.click();};
+    window.triggerFileSelect=()=>document.getElementById('file-input').click();
+    window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
 
     function animate() {
         requestAnimationFrame(animate);
