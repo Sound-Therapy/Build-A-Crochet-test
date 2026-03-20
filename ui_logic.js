@@ -130,3 +130,84 @@ function animate() {
     controls.update();
 }
 window.onload = init;
+// [ ui_logic.js 계속 ] - 아버님의 원본 로직 복구 (Undo, Save, Math)
+
+function getMouseAngle(e, target) {
+    const rect = renderer.domElement.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    return Math.atan2(e.clientY - cy, e.clientX - cx);
+}
+
+function captureState() {
+    const state = scene.children.filter(o => o.userData.isEgg).map(e => ({
+        pos: e.position.toArray(),
+        rot: e.quaternion.toArray(),
+        scale: e.userData.data.scale.toArray(),
+        offsets: e.userData.data.offsets.map(v => v.toArray()),
+        color: e.material.color.getHex()
+    }));
+    history.push(JSON.stringify(state));
+    if (history.length > 50) history.shift();
+    redoStack = [];
+}
+
+window.executeUndo = () => {
+    if (history.length <= 1) return;
+    redoStack.push(history.pop());
+    applyState(history[history.length - 1]);
+};
+
+window.executeRedo = () => {
+    if (redoStack.length === 0) return;
+    const s = redoStack.pop();
+    history.push(s);
+    applyState(s);
+};
+
+function applyState(json) {
+    const data = JSON.parse(json);
+    scene.children.filter(o => o.userData.isEgg).forEach(o => scene.remove(o));
+    data.forEach(d => {
+        const eg = createEgg(d.color);
+        eg.position.fromArray(d.pos);
+        eg.quaternion.fromArray(d.rot);
+        eg.userData.data.scale.fromArray(d.scale);
+        eg.userData.data.offsets = d.offsets.map(v => new THREE.Vector3().fromArray(v));
+        scene.add(eg);
+        updateMesh(eg);
+    });
+    updateSelectionVisuals([]);
+}
+
+window.saveProject = () => {
+    const blob = new Blob([history[history.length - 1]], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `egg_project_${new Date().getTime()}.json`;
+    a.click();
+};
+
+window.triggerFileSelect = () => document.getElementById('file-input').click();
+
+window.handleFileSelect = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (re) => {
+        const content = re.target.result;
+        history = [content];
+        applyState(content);
+    };
+    reader.readAsText(file);
+};
+
+// 키보드 단축키 (Ctrl+Z, Ctrl+Y) 원본 로직
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'z') executeUndo();
+    if (e.ctrlKey && e.key === 'y') executeRedo();
+    if (e.key === 'Delete') {
+        currentSelection.forEach(o => scene.remove(o));
+        captureState();
+        updateSelectionVisuals([]);
+    }
+});
