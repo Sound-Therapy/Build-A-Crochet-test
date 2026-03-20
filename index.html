@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Build-A-Crochet v5.48.11</title>
+    <style>
+        body { margin: 0; background-color: #ffffff; display: flex; font-family: monospace; overflow: hidden; }
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding: 15px 0; z-index: 100; }
+        .egg-btn { width: 45px; height: 55px; background: #ff69b4; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
+        .egg-btn.active { background: #28a745; }
+        #canvas-container { flex-grow: 1; position: relative; }
+    </style>
+</head>
+<body>
+    <div id="panel">
+        <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
+    </div>
+    <div id="canvas-container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="engine.js"></script>
+    <script src="ui_logic.js"></script>
+</body>
+</html>
