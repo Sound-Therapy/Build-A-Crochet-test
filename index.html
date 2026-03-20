@@ -4,24 +4,40 @@
     <meta charset="UTF-8">
     <title>Build-A-Crochet v5.48.11</title>
     <style>
-        body { margin: 0; background-color: #ffffff; display: flex; font-family: monospace; overflow: hidden; }
-        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding: 15px 0; z-index: 100; }
-        .egg-btn { width: 45px; height: 55px; background: #ff69b4; border-radius: 50%; border: 2px solid #fff; cursor: pointer; }
-        .egg-btn.active { background: #28a745; }
-        #canvas-container { flex-grow: 1; position: relative; }
-        #palette { position: absolute; top: 20px; right: 20px; background: white; padding: 10px; border-radius: 8px; display: none; grid-template-columns: repeat(5, 1fr); gap: 5px; border: 1px solid #ccc; }
-        .color-dot { width: 20px; height: 20px; border-radius: 50%; cursor: pointer; border: 1px solid #eee; }
+        body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
+        
+        /* 왼쪽 제어 패널 */
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding: 15px 0; z-index: 100; box-sizing: border-box; }
+        
+        /* 핑크 알 버튼 */
+        .egg-btn { width: 45px; height: 55px; background: #ff69b4; border-radius: 50%; border: 2px solid #fff; cursor: pointer; transition: transform 0.1s; margin-bottom: 20px; }
+        .egg-btn:active { transform: scale(0.95); }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 10px #28a745; }
+
+        /* 메인 작업 영역 */
+        #canvas-container { flex-grow: 1; position: relative; background-color: #fff; }
+
+        /* 하단 치수 정보 창 */
+        #size-info { width: 90%; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; margin-top: auto; }
+        .val-row { display: flex; justify-content: space-between; padding: 2px 5px; }
     </style>
 </head>
 <body>
     <div id="panel">
         <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
+        
+        <div id="size-info">
+            <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
+            <div class="val-row"><span>H:</span><span id="info-h">0.0</span></div>
+            <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
+        </div>
     </div>
-    <div id="canvas-container">
-        <div id="palette"></div>
-    </div>
+
+    <div id="canvas-container"></div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
     <script src="engine.js"></script>
     <script src="ui_logic.js"></script>
 </body>
