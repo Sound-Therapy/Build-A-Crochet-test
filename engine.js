@@ -1,4 +1,4 @@
-// [ engine.js ] 변수 선언 및 물리 엔진
+// [ engine.js ] v5.48.11 Core Physics Engine
 var scene, camera, renderer, controls, currentEgg, ghostEgg;
 var isPlacementMode = false, dragTarget = null, isDragging = false;
 var rotX_H, rotY_H, rotZ_H, handles = [];
@@ -9,7 +9,7 @@ var isBoxSelecting = false, boxStart = new THREE.Vector2();
 var history = [], redoStack = [], currentSelection = [];
 const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
 
-// 아버님의 3.5제곱 변형 로직 (원본 그대로)
+// 아버님의 핵심: 3.5제곱 가중치 변형 로직
 function updateMesh(egg) {
     const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos, { scale, offsets } = egg.userData.data;
     const ctrls = [new THREE.Vector3(0,10,0), new THREE.Vector3(0,-10,0), new THREE.Vector3(-7,0,0), new THREE.Vector3(7,0,0), new THREE.Vector3(0,0,7), new THREE.Vector3(0,0,-7)];
@@ -25,7 +25,6 @@ function updateMesh(egg) {
     pos.needsUpdate = true;
 }
 
-// 알 생성 (원본 그대로)
 function createEgg(color, isGhost = false) {
     const points = [];
     for (let i = 0; i <= 20; i++) {
