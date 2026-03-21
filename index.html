@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.11 - Pattern Engine Enhanced</title>
+    <title>Build-A-Crochet v5.48.12 - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -41,6 +41,7 @@
     <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
     <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
     <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box; font-family:monospace;">
+        <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
         <option value="fine_1">1 Super Fine (2.25-3.25mm)</option>
         <option value="fine_2">2 Fine (3.25-3.5mm)</option>
         <option value="light_3">3 Light (3.75-4.5mm)</option>
@@ -48,7 +49,7 @@
         <option value="bulky_5">5 Bulky (5.5-8mm)</option>
         <option value="super_6">6 Super Bulky (8-12mm)</option>
         <option value="jumbo_7">7 Jumbo (12.75mm+)</option>
-        <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
+        
     </select>
     <div style="display:flex; justify-content:space-between;">
         <button onclick="closeModal()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
@@ -449,6 +450,47 @@
         renderer.render(scene, camera); controls.update();
     }
     window.onload = init;
+    // P2D 팝업창을 여는 함수
+function openP2DModal() {
+    document.getElementById('p2d-modal').style.display = 'block';
+    document.getElementById('p2d-overlay').style.display = 'block';
+}
+
+// 디자인 생성 로직 (일단 창만 닫히게 설정)
+function generateP2DDesign() {
+    alert('선택하신 실과 패턴으로 디자인을 분석합니다!');
+    document.getElementById('p2d-modal').style.display = 'none';
+    document.getElementById('p2d-overlay').style.display = 'none';
+}
 </script>
+  <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
+    
+    <h3 style="margin-top:0; color:#6f42c1; text-align:center;">P2D Pattern Engine</h3>
+
+    <div style="margin-bottom:15px;">
+        <label style="font-weight:bold; font-size:12px;">🧶 실 규격 선택 (Yarn Weight):</label>
+        <select id="yarn-select" style="width:100%; padding:8px; margin-top:5px; border-radius:5px; border:1px solid #ccc; font-size:12px;">
+            <option value="1.35">0 Lace/Micro (1.25-1.5mm)</option>
+            <option value="2.75">1 Super Fine (2.25-3.25mm)</option>
+            <option value="3.35">2 Fine (3.25-3.5mm)</option>
+            <option value="4.12">3 Light (3.75-4.5mm)</option>
+            <option value="5.0" selected>4 Medium (4.5-5.5mm)</option>
+            <option value="6.75">5 Bulky (5.5-8mm)</option>
+            <option value="10.0">6 Super Bulky (8-12mm)</option>
+            <option value="12.75">7 Jumbo (12.75mm+)</option>
+        </select>
+    </div>
+
+    <div style="margin-bottom:15px;">
+        <label style="font-weight:bold; font-size:12px;">📝 기존 패턴 붙여넣기:</label>
+        <textarea id="pattern-input" placeholder="여기에 기존 도안을 붙여넣으세요..." style="width:100%; height:80px; margin-top:5px; padding:8px; border-radius:5px; border:1px solid #ccc; resize:none; font-size:11px;"></textarea>
+    </div>
+
+    <button onclick="generateP2DDesign()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ 디자인 생성 (Apply)</button>
+    
+    <button onclick="document.getElementById('p2d-modal').style.display='none'; document.getElementById('p2d-overlay').style.display='none'" style="width:100%; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer; font-size:12px;">창 닫기</button>
+</div>
+
+<div id="p2d-overlay" onclick="this.style.display='none'; document.getElementById('p2d-modal').style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;"></div>
 </body>
 </html>
