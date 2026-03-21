@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet Engine v5.48.28</title>
+    <title>Build-A-Crochet Engine v5.48.30</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -84,7 +84,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.28</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.30</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -122,6 +122,120 @@
     };
     const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
     const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
+    const LEARN_DB_KEY = "bac_learning_v1";
+    let lastGenerationContext = null;
+    const learningState = {
+        stitchWidthByWeight: {},
+        roundHeightScaleByWeight: {},
+        instructionModelByWeight: {},
+        samples: []
+    };
+
+    function getDefaultStitchWidthCm(config) {
+        return Math.max(0.15, config.roundH * 1.6);
+    }
+
+    function loadLearningState() {
+        try {
+            const raw = localStorage.getItem(LEARN_DB_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                learningState.stitchWidthByWeight = parsed.stitchWidthByWeight || {};
+                learningState.roundHeightScaleByWeight = parsed.roundHeightScaleByWeight || {};
+                learningState.instructionModelByWeight = parsed.instructionModelByWeight || {};
+                learningState.samples = Array.isArray(parsed.samples) ? parsed.samples : [];
+            }
+        } catch (e) {}
+    }
+
+    function saveLearningState() {
+        const payload = {
+            stitchWidthByWeight: learningState.stitchWidthByWeight,
+            roundHeightScaleByWeight: learningState.roundHeightScaleByWeight,
+            instructionModelByWeight: learningState.instructionModelByWeight,
+            samples: learningState.samples.slice(-80)
+        };
+        localStorage.setItem(LEARN_DB_KEY, JSON.stringify(payload));
+    }
+
+    function classifyInstruction(desc = "") {
+        const t = String(desc || "").toLowerCase();
+        if (t.includes("magic")) return "magic";
+        if (t.includes("color")) return "color";
+        if (t.includes("dec")) return "dec";
+        if (t.includes("inc")) return "inc";
+        return "sc";
+    }
+
+    function getVertexCloud(targets) {
+        const cloud = [];
+        let sumX = 0, sumZ = 0, count = 0;
+        let minY = Infinity, maxY = -Infinity;
+        targets.forEach(obj => {
+            const pos = obj.geometry.attributes.position;
+            const matrix = obj.matrixWorld;
+            for (let i = 0; i < pos.count; i++) {
+                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix);
+                cloud.push(v);
+                sumX += v.x; sumZ += v.z; count++;
+                if (v.y < minY) minY = v.y;
+                if (v.y > maxY) maxY = v.y;
+            }
+        });
+        return {
+            vertices: cloud,
+            centerX: count ? (sumX / count) : 0,
+            centerZ: count ? (sumZ / count) : 0,
+            minY: isFinite(minY) ? minY : 0,
+            maxY: isFinite(maxY) ? maxY : 0
+        };
+    }
+
+    function buildRoundsFromSlices(targets, weightKey, config) {
+        const cloudData = getVertexCloud(targets);
+        const stepScale = learningState.roundHeightScaleByWeight[weightKey] || 1.0;
+        const stepCm = Math.max(0.1, config.roundH * stepScale);
+        const stepWorld = stepCm / CM_RATIO;
+        const bandHalf = stepWorld * 0.5;
+        const stitchWidthCm = learningState.stitchWidthByWeight[weightKey] || getDefaultStitchWidthCm(config);
+        const startColor = '#' + targets[0].material.color.getHexString();
+        const rounds = [{ rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` }];
+        const profiles = [];
+        let prevSts = 0;
+        let rnd = 1;
+
+        for (let y = cloudData.maxY; y >= cloudData.minY; y -= stepWorld) {
+            let maxRadius = 0;
+            let sampleCount = 0;
+            for (let i = 0; i < cloudData.vertices.length; i++) {
+                const v = cloudData.vertices[i];
+                if (Math.abs(v.y - y) > bandHalf) continue;
+                const r = Math.hypot(v.x - cloudData.centerX, v.z - cloudData.centerZ);
+                if (r > maxRadius) maxRadius = r;
+                sampleCount++;
+            }
+            if (sampleCount < 12 || maxRadius <= 0.05) continue;
+
+            const circumferenceCm = 2 * Math.PI * maxRadius * CM_RATIO;
+            const rawSts = Math.max(3, Math.round(circumferenceCm / stitchWidthCm));
+            const smoothedSts = prevSts === 0 ? rawSts : Math.max(3, Math.round((rawSts + prevSts * 2) / 3));
+            const delta = smoothedSts - prevSts;
+            const instrModel = learningState.instructionModelByWeight[weightKey] || { incAt: 2, decAt: -2 };
+            let instruction = "sc around";
+            if (rnd === 1) instruction = "Magic Ring";
+            else if (delta >= instrModel.incAt) instruction = `inc x${Math.max(1, Math.abs(delta))}`;
+            else if (delta <= instrModel.decAt) instruction = `dec x${Math.max(1, Math.abs(delta))}`;
+
+            rounds.push({ rnd, desc: instruction, sts: smoothedSts });
+            profiles.push({ rnd, circumferenceCm, stitches: smoothedSts, y });
+            prevSts = smoothedSts;
+            rnd++;
+            if (rnd > 120) break;
+        }
+
+        return { rounds, profiles, stitchWidthCm, stepCm };
+    }
 
     function init() {
         scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
@@ -146,6 +260,7 @@
         window.addEventListener('pointerup', onUp);
         window.addEventListener('keydown', onKeyDown);
         
+        loadLearningState();
         captureState(); animate();
     }
 
@@ -167,40 +282,16 @@
         const targets = currentSelection;
         closeModal();
 
-        let maxD = -1, tip = new THREE.Vector3(), startColor = '#ffffff';
-        targets.forEach(obj => {
-            const pos = obj.geometry.attributes.position, matrix = obj.matrixWorld;
-            for(let i=0; i<pos.count; i++){
-                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix), d = v.length();
-                if(d > maxD) { maxD = d; tip.copy(v); startColor = '#' + obj.material.color.getHexString(); }
-            }
-        });
-
-        const rounds = [], step = config.roundH / CM_RATIO;
-        const direction = new THREE.Vector3().subVectors(new THREE.Vector3(), tip).normalize();
-        let lastColor = startColor;
-        rounds.push({rnd: 0, desc: `[ Start with ${colorNames[startColor] || startColor.toUpperCase()} ]` });
-        
-        // 3D 공간 레이캐스팅 분석 (v5.47 원본 로직 유지)
-        for(let r=1; r<=40; r++){
-            const checkPos = tip.clone().add(direction.clone().multiplyScalar(r * step));
-            const ray = new THREE.Raycaster(checkPos, new THREE.Vector3(0, 1, 0));
-            const hit = ray.intersectObjects(targets);
-            
-            let curColor = lastColor;
-            if(hit.length > 0) curColor = '#' + hit[0].object.material.color.getHexString();
-            
-            if(curColor !== lastColor){
-                rounds.push({rnd: r, desc: `⭐ Change Color to ${colorNames[curColor] || curColor.toUpperCase()}`});
-                lastColor = curColor;
-            }
-            
-            // 바닥에 닿거나 모델 끝이면 종료
-            if (checkPos.y <= 0) break;
-
-            let instruction = (r === 1) ? "Magic Ring" : (r % 3 === 0 ? "inc 1, sc around" : "sc around");
-            rounds.push({rnd: r, desc: instruction, sts: 6 + (r * 2)});
-        }
+        const generated = buildRoundsFromSlices(targets, weightKey, config);
+        const rounds = generated.rounds;
+        lastGenerationContext = {
+            weightKey,
+            projectName: pName,
+            generatedRounds: rounds.map(x => ({ rnd: x.rnd, desc: x.desc, sts: x.sts || 0 })),
+            profiles: generated.profiles,
+            stitchWidthCm: generated.stitchWidthCm,
+            stepCm: generated.stepCm
+        };
 
         // 결과 팝업창 생성 (editable + deep learn)
         const win = window.open("", "_blank", "width=450,height=700");
@@ -208,7 +299,7 @@
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
             <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
                 <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.28</p>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Generated by v5.48.30</p>
                 <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
                     <tr style="background:#eee;">
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
@@ -229,25 +320,46 @@
                 <button onclick="submitLearn()" style="margin-top:14px; width:100%; height:42px; background:#dc3545; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">
                     DEEP LEARN
                 </button>
+                <div id="learn-status" style="margin-top:10px; font-size:12px; color:#666; display:none;">Waiting...</div>
+                <div id="learn-progress-wrap" style="margin-top:8px; width:100%; height:10px; background:#eee; border-radius:999px; overflow:hidden; display:none;">
+                    <div id="learn-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#dc3545,#ff7b7b); transition:width .2s;"></div>
+                </div>
             </div>
             <script>
-                function submitLearn() {
+                function setLearnProgress(percent, text) {
+                    const wrap = document.getElementById('learn-progress-wrap');
+                    const bar = document.getElementById('learn-progress-bar');
+                    const status = document.getElementById('learn-status');
+                    wrap.style.display = 'block';
+                    status.style.display = 'block';
+                    bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+                    status.textContent = text || 'Learning...';
+                }
+
+                async function submitLearn() {
                     try {
+                        setLearnProgress(5, 'Reading edited pattern...');
                         const rows = Array.from(document.querySelectorAll('table tr')).slice(1);
                         const editedRounds = rows.map((row, idx) => {
                             const inputs = row.querySelectorAll('input');
                             return {
-                                rnd: idx + 1,
+                                rnd: idx,
                                 desc: inputs[0] ? inputs[0].value : '',
                                 sts: inputs[1] ? parseInt(inputs[1].value || '0', 10) : 0
                             };
                         });
+                        setLearnProgress(20, 'Comparing generated vs corrected...');
                         if (window.opener && typeof window.opener.finalizeLearning === 'function') {
-                            window.opener.finalizeLearning(editedRounds);
+                            const result = await window.opener.finalizeLearning({
+                                editedRounds: editedRounds,
+                                onProgress: (pct, msg) => setLearnProgress(pct, msg)
+                            });
+                            setLearnProgress(100, result && result.message ? result.message : 'Learning finished.');
+                        } else {
+                            setLearnProgress(100, 'Cannot connect to opener app.');
                         }
-                        alert('Learning data sent to the app.');
                     } catch (err) {
-                        alert('Failed to send learning data.');
+                        setLearnProgress(100, 'Failed to learn from this pattern.');
                     }
                 }
             <\/script>
@@ -603,7 +715,7 @@ function createNewCrochetMesh(rounds, yarnMm) {
         updateSelectionVisuals([newMesh]); 
     }
 
-    console.log("P2D Object successfully integrated into v5.48.28");
+    console.log("P2D Object successfully integrated into v5.48.30");
 }
 /**
  * NEW: The missing Modal Close function
@@ -612,7 +724,7 @@ function closeP2DModal() {
     document.getElementById('p2d-modal').style.display = 'none';
     document.getElementById('p2d-overlay').style.display = 'none';
 }
-    // --- [ Build-A-Crochet Engine v5.48.28 Deep Learning Logic ] ---
+    // --- [ Build-A-Crochet Engine v5.48.30 Deep Learning Logic ] ---
 
 window.openDeepLearningModal = () => {
     if (currentSelection.length === 0) return alert("학습시킬 디자인을 먼저 선택해주세요.");
@@ -669,9 +781,89 @@ function getPatternDataForLearning(targets, config) {
     return rounds;
 }
 
-window.finalizeLearning = (editedRounds = []) => {
-    const count = Array.isArray(editedRounds) ? editedRounds.length : 0;
-    alert(`정답 패턴 ${count}개 라운드를 확인했습니다!\n다음 단계에서 이 데이터를 기반으로 자동 학습 로직에 연결할 수 있습니다.`);
+window.finalizeLearning = async (payload = {}) => {
+    const notifyProgress = typeof payload.onProgress === "function" ? payload.onProgress : null;
+    if (notifyProgress) notifyProgress(30, "Extracting learning signals...");
+    const editedRounds = Array.isArray(payload.editedRounds) ? payload.editedRounds : [];
+    if (!lastGenerationContext || !editedRounds.length) {
+        const message = "학습할 데이터가 부족합니다. 패턴 생성 후 다시 시도해주세요.";
+        if (notifyProgress) notifyProgress(100, message);
+        return { ok: false, message };
+    }
+
+    const weightKey = lastGenerationContext.weightKey;
+    const generatedMap = new Map(lastGenerationContext.generatedRounds.map(r => [r.rnd, r]));
+    const profileMap = new Map(lastGenerationContext.profiles.map(p => [p.rnd, p]));
+    const widthCandidates = [];
+    const deltaSamples = [];
+
+    editedRounds.forEach(er => {
+        if (er.rnd === 0) return;
+        if (!Number.isFinite(er.sts) || er.sts <= 0) return;
+        const pf = profileMap.get(er.rnd);
+        const gr = generatedMap.get(er.rnd);
+        if (pf && pf.circumferenceCm > 0) widthCandidates.push(pf.circumferenceCm / er.sts);
+        if (gr && Number.isFinite(gr.sts)) deltaSamples.push(er.sts - gr.sts);
+    });
+
+    if (widthCandidates.length > 0) {
+        const avgWidth = widthCandidates.reduce((a, b) => a + b, 0) / widthCandidates.length;
+        const current = learningState.stitchWidthByWeight[weightKey] || lastGenerationContext.stitchWidthCm;
+        learningState.stitchWidthByWeight[weightKey] = (current * 0.7) + (avgWidth * 0.3);
+    }
+
+    if (deltaSamples.length > 0) {
+        const meanDelta = deltaSamples.reduce((a, b) => a + b, 0) / deltaSamples.length;
+        const currentScale = learningState.roundHeightScaleByWeight[weightKey] || 1.0;
+        if (meanDelta > 1.2) learningState.roundHeightScaleByWeight[weightKey] = Math.max(0.75, currentScale * 0.98);
+        if (meanDelta < -1.2) learningState.roundHeightScaleByWeight[weightKey] = Math.min(1.25, currentScale * 1.02);
+    }
+
+    if (notifyProgress) notifyProgress(65, "Learning instruction policy...");
+    const incDeltas = [];
+    const decDeltas = [];
+    let prevEditedSts = null;
+    editedRounds.forEach(er => {
+        if (!Number.isFinite(er.sts) || er.sts <= 0) return;
+        if (prevEditedSts === null) {
+            prevEditedSts = er.sts;
+            return;
+        }
+        const className = classifyInstruction(er.desc);
+        const d = er.sts - prevEditedSts;
+        if (className === "inc") incDeltas.push(d);
+        if (className === "dec") decDeltas.push(d);
+        prevEditedSts = er.sts;
+    });
+
+    const model = learningState.instructionModelByWeight[weightKey] || { incAt: 2, decAt: -2 };
+    if (incDeltas.length > 0) {
+        const minInc = Math.max(1, Math.round(Math.min(...incDeltas)));
+        model.incAt = (model.incAt * 0.7) + (minInc * 0.3);
+    }
+    if (decDeltas.length > 0) {
+        const maxDec = Math.min(-1, Math.round(Math.max(...decDeltas)));
+        model.decAt = (model.decAt * 0.7) + (maxDec * 0.3);
+    }
+    model.incAt = Math.max(1.2, Math.min(6, model.incAt));
+    model.decAt = Math.min(-1.2, Math.max(-6, model.decAt));
+    learningState.instructionModelByWeight[weightKey] = model;
+
+    learningState.samples.push({
+        ts: Date.now(),
+        weightKey,
+        projectName: lastGenerationContext.projectName,
+        generated: lastGenerationContext.generatedRounds.slice(0, 120),
+        corrected: editedRounds.slice(0, 120)
+    });
+    learningState.samples = learningState.samples.slice(-80);
+    if (notifyProgress) notifyProgress(85, "Saving updates...");
+    saveLearningState();
+
+    const learnedWidth = learningState.stitchWidthByWeight[weightKey];
+    const resultMessage = `Learning complete. Stitch width=${learnedWidth.toFixed(3)}cm, incAt=${model.incAt.toFixed(2)}, decAt=${model.decAt.toFixed(2)}.`;
+    if (notifyProgress) notifyProgress(100, resultMessage);
+    return { ok: true, message: resultMessage, model };
 };
 </script>
   <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
