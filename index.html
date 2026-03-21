@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.15 - Pattern Engine Enhanced</title>
+    <title>Build-A-Crochet - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.15</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.16</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -466,86 +466,59 @@ function generateP2DDesign() {
     const patternText = document.getElementById('pattern-input').value;
 
     // 2. Validation
-    if (!currentEgg) {
-        alert("Please select an egg object first!");
-        return;
-    }
     if (!patternText.trim()) {
-        alert("Please paste your pattern text.");
+        alert("Please paste your pattern text first.");
         return;
     }
 
-    // 3. STEP 1: PARSE THE PATTERN (Analyze text to get stitch counts per round)
+    // 3. STEP 1: PARSE THE PATTERN (Extract rounds and stitches)
     const roundsData = parsePatternText(patternText);
     
     if (roundsData.length === 0) {
-        alert("Could not analyze any rounds. Please check the pattern format.");
+        alert("Could not find any stitch data (e.g., '(12)') in the pattern.");
         return;
     }
 
-    // 4. STEP 2: APPLY DESIGN (Modify the 3D model based on parsed data)
-    applyCrochetDesign(roundsData, yarnWidthMm);
+    // 4. STEP 2: CREATE NEW DESIGN FROM SCRATCH
+    // Instead of modifying, we create a NEW LatheGeometry based on the pattern
+    createNewCrochetMesh(roundsData, yarnWidthMm);
 
     // 5. Finalize
-    alert(`Successfully generated design with ${roundsData.length} rounds!`);
     closeP2DModal();
 }
 
 /**
- * Parses pattern text into an array of {round: number, stitches: number}
- * Example Input: "1) magic ring 6sc\n2) 1inc at all points (12)"
- * Example Output: [{round: 1, stitches: 6}, {round: 2, stitches: 12}]
+ * Creates a 3D shape based on the stitch counts of each round.
  */
-function parsePatternText(text) {
-    const lines = text.split('\n');
-    let roundsData = [];
-    let currentRound = 1;
+function createNewCrochetMesh(rounds, yarnMm) {
+    const points = [];
+    const heightStep = (yarnMm / 10) * 0.8; // Convert mm to cm and adjust row height
 
-    // A simple regex to find numbers inside parentheses, like "(18)"
-    const stitchRegex = /\((\d+)\)/;
-
-    lines.forEach(line => {
-        // Try to find the total stitch count in parentheses (e.g., "(12)")
-        const match = line.match(stitchRegex);
+    rounds.forEach((rd, index) => {
+        // Calculate radius: (Stitches * YarnWidth) / PI / 2 (Radius is half of Diameter)
+        const radius = (rd.stitches * yarnMm) / Math.PI / 2 / 10; 
+        const yPos = index * heightStep;
         
-        if (match && match[1]) {
-            const stitches = parseInt(match[1]);
-            roundsData.push({ round: currentRound, stitches: stitches });
-            currentRound++;
-        } else if (line.toLowerCase().includes("magic ring")) {
-            // Special case for magic ring often without parentheses
-            const mrMatch = line.match(/(\d+)sc/i);
-            if (mrMatch && mrMatch[1]) {
-                const stitches = parseInt(mrMatch[1]);
-                roundsData.push({ round: currentRound, stitches: stitches });
-                currentRound++;
-            }
-        }
-        // TODO: Handle range rounds like "4 to 6)" in the next update
+        // Create a profile point for the Lathe (x = radius, y = height)
+        points.push(new THREE.Vector2(radius, yPos));
     });
 
-    return roundsData;
-}
-
-/**
- * Placeholder for the next major step: Physically modifying the 3D geometry
- */
-function applyCrochetDesign(rounds, yarnWidth) {
-    console.log("Applying design to 3D model...", rounds, yarnWidth);
+    // Create the geometry by revolving the points 360 degrees
+    const geometry = new THREE.LatheGeometry(points, 32);
+    const material = new THREE.MeshStandardMaterial({ 
+        color: 0x6f42c1, // Purple color for P2D designs
+        wireframe: false,
+        side: THREE.DoubleSide 
+    });
     
-    // For now, let's just scale the overall egg based on the widest round (like before)
-    // to confirm the parsing works.
-    const maxStitches = Math.max(...rounds.map(r => r.stitches));
-    const calculatedDiameterCm = (maxStitches * yarnWidth) / Math.PI / 10;
-    const finalScale = calculatedDiameterCm / 5;
+    const newMesh = new THREE.Mesh(geometry, material);
     
-    currentEgg.userData.data.scale.set(finalScale, finalScale, finalScale);
+    // Position it at the center of the grid
+    newMesh.position.set(0, 0, 0);
+    scene.add(newMesh);
     
-    if (typeof updateInfoDisplay === "function") {
-        updateInfoDisplay();
-    }
-    
-    // TODO: Implement Lattice Deformer or Vertex Manipulation here to sculpt the egg!
+    // Focus camera or store as current target if needed
+    console.log("New Design Generated:", newMesh);
 }
 </script>
   <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
