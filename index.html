@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.22</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.23</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -519,63 +519,49 @@ function parsePatternText(text) {
  */
 function createNewCrochetMesh(rounds, yarnMm) {
     const points = [];
-    // Increase heightStep for better vertical scale (1.5 is standard)
-    const heightStep = (yarnMm / 10) * 1.5; 
+    const heightStep = (yarnMm / 10) * 1.5; // Adjusted for CM_RATIO
 
-    // 1. Generate Profile Points
+    // 1. Point Generation
     points.push(new THREE.Vector2(0.001, 0)); 
     rounds.forEach((rd, index) => {
         const radius = (rd.stitches * yarnMm) / Math.PI / 2 / 10; 
         const yPos = (index + 1) * heightStep;
         points.push(new THREE.Vector2(radius, yPos));
     });
-    const topY = (rounds.length + 1) * heightStep;
-    points.push(new THREE.Vector2(0.001, topY));
+    points.push(new THREE.Vector2(0.001, (rounds.length + 1) * heightStep));
 
-    // 2. Create Geometry and Mesh
+    // 2. Mesh Creation
     const geometry = new THREE.LatheGeometry(points, 32);
     const material = new THREE.MeshStandardMaterial({ 
         color: 0x6f42c1, 
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.9,
-        flatShading: false 
+        opacity: 0.9 
     });
-    
     const newMesh = new THREE.Mesh(geometry, material);
-    newMesh.name = "P2D_Object_" + Date.now();
-
-    // 3. System Integration - Essential for v5.48.11 Edit System
+    
+    // 3. System Integration (The "Formal" Way)
     newMesh.userData.isEgg = true;
     newMesh.userData.data = {
-        scale: new THREE.Vector3(1, 1, 1), 
-        offsets: points.map(() => new THREE.Vector3(0, 0, 0)),
-        originalPoints: JSON.parse(JSON.stringify(points))
+        scale: new THREE.Vector3(1, 1, 1),
+        offsets: points.map(() => new THREE.Vector3(0, 0, 0))
     };
 
-    // 4. Register to Scene AND the Global 'eggs' array (CRITICAL)
     scene.add(newMesh);
-    if (Array.isArray(window.eggs)) {
-        window.eggs.push(newMesh); // 정식 리스트에 등록
-    }
 
-    // 5. Set as Global Target and Save History
-    currentEgg = newMesh; 
+    // 4. Update Engine Globals
+    currentEgg = newMesh;
+    currentSelection = [newMesh]; // Now the engine knows it's selected
 
-    // Simulation of a formal action so Undo/Redo works
-    if (typeof saveState === "function") {
-        saveState(); 
-    }
-    
-    // Position it center on grid
-    newMesh.position.set(0, 0, 0);
-
-    // Refresh everything
+    // 5. Save History & UI
+    if (typeof captureState === "function") captureState();
     if (typeof updateInfoDisplay === "function") updateInfoDisplay();
     
-    console.log("P2D Object Fully Registered to Engine.");
-}
+    // Auto-focus handles on the new object
+    if (typeof createHandles === "function") createHandles();
 
+    console.log("P2D Object successfully integrated into v5.48.22");
+}
 /**
  * NEW: The missing Modal Close function
  */
