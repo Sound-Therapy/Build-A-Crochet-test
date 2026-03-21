@@ -80,12 +80,11 @@
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
         <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
        <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
-        <button class="learn-btn" onclick="openDeepLearningModal()">DEEP LEARN</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.25</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.26</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -203,7 +202,7 @@
             rounds.push({rnd: r, desc: instruction, sts: 6 + (r * 2)});
         }
 
-        // 결과 팝업창 생성
+        // 결과 팝업창 생성 (editable + deep learn)
         const win = window.open("", "_blank", "width=450,height=700");
         let html = `
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
@@ -215,11 +214,44 @@
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
                     </tr>`;
         rounds.forEach(x => {
-            html += `<tr><td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
-                         <td style="padding:8px; border:1px solid #ddd;">${x.desc}</td>
-                         <td style="padding:8px; border:1px solid #ddd;">${x.sts || '-'}</td></tr>`;
+            html += `<tr>
+                        <td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
+                        <td style="padding:0; border:1px solid #ddd;">
+                            <input type="text" value="${x.desc}" style="width:95%; border:none; padding:8px; font-family:monospace;">
+                        </td>
+                        <td style="padding:0; border:1px solid #ddd;">
+                            <input type="number" value="${x.sts || 0}" style="width:85%; border:none; padding:8px; text-align:center; font-family:monospace;">
+                        </td>
+                     </tr>`;
         });
-        html += `</table></div></body>`;
+        html += `
+                </table>
+                <button onclick="submitLearn()" style="margin-top:14px; width:100%; height:42px; background:#dc3545; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">
+                    DEEP LEARN
+                </button>
+            </div>
+            <script>
+                function submitLearn() {
+                    try {
+                        const rows = Array.from(document.querySelectorAll('table tr')).slice(1);
+                        const editedRounds = rows.map((row, idx) => {
+                            const inputs = row.querySelectorAll('input');
+                            return {
+                                rnd: idx + 1,
+                                desc: inputs[0] ? inputs[0].value : '',
+                                sts: inputs[1] ? parseInt(inputs[1].value || '0', 10) : 0
+                            };
+                        });
+                        if (window.opener && typeof window.opener.finalizeLearning === 'function') {
+                            window.opener.finalizeLearning(editedRounds);
+                        }
+                        alert('Learning data sent to the app.');
+                    } catch (err) {
+                        alert('Failed to send learning data.');
+                    }
+                }
+            </script>
+        </body>`;
         win.document.write(html);
     };
 
@@ -637,8 +669,9 @@ function getPatternDataForLearning(targets, config) {
     return rounds;
 }
 
-window.finalizeLearning = () => {
-    alert("아버님의 정답을 확인했습니다! \n이제 실 두께 대비 스티치 비율을 역계산하여 엔진에 반영합니다.");
+window.finalizeLearning = (editedRounds = []) => {
+    const count = Array.isArray(editedRounds) ? editedRounds.length : 0;
+    alert(`정답 패턴 ${count}개 라운드를 확인했습니다!\n다음 단계에서 이 데이터를 기반으로 자동 학습 로직에 연결할 수 있습니다.`);
 };
 </script>
   <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
