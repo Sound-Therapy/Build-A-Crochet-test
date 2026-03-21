@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.12 - Pattern Engine Enhanced</title>
+    <title>Build-A-Crochet v5.48.13 - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.11</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.13</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -468,7 +468,7 @@ function generateP2DDesign() {
     <h3 style="margin-top:0; color:#6f42c1; text-align:center;">P2D Pattern Engine</h3>
 
     <div style="margin-bottom:15px;">
-        <label style="font-weight:bold; font-size:12px;">🧶 실 규격 선택 (Yarn Weight):</label>
+        <label style="font-weight:bold; font-size:12px;">🧶 Yarn Weight:</label>
         <select id="yarn-select" style="width:100%; padding:8px; margin-top:5px; border-radius:5px; border:1px solid #ccc; font-size:12px;">
             <option value="1.35">0 Lace/Micro (1.25-1.5mm)</option>
             <option value="2.75">1 Super Fine (2.25-3.25mm)</option>
@@ -482,13 +482,13 @@ function generateP2DDesign() {
     </div>
 
     <div style="margin-bottom:15px;">
-        <label style="font-weight:bold; font-size:12px;">📝 기존 패턴 붙여넣기:</label>
-        <textarea id="pattern-input" placeholder="여기에 기존 도안을 붙여넣으세요..." style="width:100%; height:80px; margin-top:5px; padding:8px; border-radius:5px; border:1px solid #ccc; resize:none; font-size:11px;"></textarea>
+        <label style="font-weight:bold; font-size:12px;">📝 Pattern:</label>
+        <textarea id="pattern-input" placeholder="Paste your pattern" style="width:100%; height:80px; margin-top:5px; padding:8px; border-radius:5px; border:1px solid #ccc; resize:none; font-size:11px;"></textarea>
     </div>
 
-    <button onclick="generateP2DDesign()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ 디자인 생성 (Apply)</button>
+    <button onclick="generateP2DDesign()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ Generate Design (Apply)</button>
     
-    <button onclick="document.getElementById('p2d-modal').style.display='none'; document.getElementById('p2d-overlay').style.display='none'" style="width:100%; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer; font-size:12px;">창 닫기</button>
+    <button onclick="document.getElementById('p2d-modal').style.display='none'; document.getElementById('p2d-overlay').style.display='none'" style="width:100%; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer; font-size:12px;">Close</button>
 </div>
 
 <div id="p2d-overlay" onclick="this.style.display='none'; document.getElementById('p2d-modal').style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;"></div>
