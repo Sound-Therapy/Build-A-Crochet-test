@@ -84,7 +84,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.28</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.29</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -628,18 +628,23 @@ window.openDeepLearningModal = () => {
 // --- [ Build-A-Crochet Engine v5.48.27: REAL GEOMETRY & UNIFIED LOGIC ] ---
 
 window.generatePatternWithLearning = () => {
-    // 1. 실 설정 가져오기 (이미 아버님이 맞춰놓으신 yarn-select 사용)
+    // 1. 시스템이 사용하는 진짜 바구니 이름(selectedObjects)을 가져옵니다.
+    const selection = window.selectedObjects || []; 
+    
     const weightSelect = document.getElementById('yarn-select');
     const weightKey = weightSelect ? weightSelect.value : "5.0";
     const config = yarnWeights[weightKey];
-    
-    // 2. 프로젝트 이름 (에러 방지를 위해 고정값 사용)
-    const pName = "New Project";
 
-    // 3. 모델 선택 여부 확인
-    if (currentSelection.length === 0) {
+    // 2. 바구니가 비어있는지 확인 (selection으로 이름 통일)
+    if (selection.length === 0) {
         return alert("Please select a 3D object on the screen first!");
     }
+    
+    const modal = document.getElementById('p2d-modal');
+    if(modal) modal.style.display = 'none';
+
+    // 3. 분석 엔진 실행 (selection을 넣어줍니다)
+    const rounds = getPatternDataForLearning(selection, config);
     
     // 4. 기존 설정창 닫기
     const modal = document.getElementById('p2d-modal');
