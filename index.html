@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet v5.48.14 - Pattern Engine Enhanced</title>
+    <title>Build-A-Crochet v5.48.15 - Pattern Engine Enhanced</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.14</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.15</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -456,16 +456,18 @@ function openP2DModal() {
     document.getElementById('p2d-overlay').style.display = 'block';
 }
 
-// 디자인 생성 로직 (일단 창만 닫히게 설정)
+/**
+ * P2D Engine v1.0
+ * Parses crochet pattern text and applies it to the 3D model.
+ */
 function generateP2DDesign() {
-    // 1. Get input values from UI
-    const yarnSelect = document.getElementById('yarn-select');
-    const yarnMm = parseFloat(yarnSelect.value);
+    // 1. Get input values
+    const yarnWidthMm = parseFloat(document.getElementById('yarn-select').value);
     const patternText = document.getElementById('pattern-input').value;
 
-    // 2. Validation: Ensure an egg is selected and text exists
+    // 2. Validation
     if (!currentEgg) {
-        alert("Please select an object first!");
+        alert("Please select an egg object first!");
         return;
     }
     if (!patternText.trim()) {
@@ -473,40 +475,77 @@ function generateP2DDesign() {
         return;
     }
 
-    // 3. Extract numbers from the pattern string
-    const numbersFound = patternText.match(/\d+/g);
-    if (!numbersFound) {
-        alert("No numerical data found in the pattern.");
+    // 3. STEP 1: PARSE THE PATTERN (Analyze text to get stitch counts per round)
+    const roundsData = parsePatternText(patternText);
+    
+    if (roundsData.length === 0) {
+        alert("Could not analyze any rounds. Please check the pattern format.");
         return;
     }
 
-    // 4. Find the maximum stitch count (Widest part)
-    const maxStitches = Math.max(...numbersFound.map(Number));
+    // 4. STEP 2: APPLY DESIGN (Modify the 3D model based on parsed data)
+    applyCrochetDesign(roundsData, yarnWidthMm);
 
-    // 5. Physics Calculation (Circumference to Diameter in CM)
-    // Formula: (Stitches * Yarn Width) / PI / 10
-    const calculatedDiameterCm = (maxStitches * yarnMm) / Math.PI / 10;
+    // 5. Finalize
+    alert(`Successfully generated design with ${roundsData.length} rounds!`);
+    closeP2DModal();
+}
 
-    // 6. Apply to 3D Model Scale
-    // Based on v5.48.11 coordinate system (1.0 scale approx 5cm)
+/**
+ * Parses pattern text into an array of {round: number, stitches: number}
+ * Example Input: "1) magic ring 6sc\n2) 1inc at all points (12)"
+ * Example Output: [{round: 1, stitches: 6}, {round: 2, stitches: 12}]
+ */
+function parsePatternText(text) {
+    const lines = text.split('\n');
+    let roundsData = [];
+    let currentRound = 1;
+
+    // A simple regex to find numbers inside parentheses, like "(18)"
+    const stitchRegex = /\((\d+)\)/;
+
+    lines.forEach(line => {
+        // Try to find the total stitch count in parentheses (e.g., "(12)")
+        const match = line.match(stitchRegex);
+        
+        if (match && match[1]) {
+            const stitches = parseInt(match[1]);
+            roundsData.push({ round: currentRound, stitches: stitches });
+            currentRound++;
+        } else if (line.toLowerCase().includes("magic ring")) {
+            // Special case for magic ring often without parentheses
+            const mrMatch = line.match(/(\d+)sc/i);
+            if (mrMatch && mrMatch[1]) {
+                const stitches = parseInt(mrMatch[1]);
+                roundsData.push({ round: currentRound, stitches: stitches });
+                currentRound++;
+            }
+        }
+        // TODO: Handle range rounds like "4 to 6)" in the next update
+    });
+
+    return roundsData;
+}
+
+/**
+ * Placeholder for the next major step: Physically modifying the 3D geometry
+ */
+function applyCrochetDesign(rounds, yarnWidth) {
+    console.log("Applying design to 3D model...", rounds, yarnWidth);
+    
+    // For now, let's just scale the overall egg based on the widest round (like before)
+    // to confirm the parsing works.
+    const maxStitches = Math.max(...rounds.map(r => r.stitches));
+    const calculatedDiameterCm = (maxStitches * yarnWidth) / Math.PI / 10;
     const finalScale = calculatedDiameterCm / 5;
     
     currentEgg.userData.data.scale.set(finalScale, finalScale, finalScale);
     
-    // 7. Sync UI Displays
     if (typeof updateInfoDisplay === "function") {
         updateInfoDisplay();
     }
-
-    // 8. Finalize and Close
-    alert(`Applied! Estimated Diameter: ${calculatedDiameterCm.toFixed(2)} cm`);
-    closeP2DModal();
-}
-
-// Utility to close both modal and overlay
-function closeP2DModal() {
-    document.getElementById('p2d-modal').style.display = 'none';
-    document.getElementById('p2d-overlay').style.display = 'none';
+    
+    // TODO: Implement Lattice Deformer or Vertex Manipulation here to sculpt the egg!
 }
 </script>
   <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
