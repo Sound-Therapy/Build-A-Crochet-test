@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.21</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.22</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -519,7 +519,7 @@ function parsePatternText(text) {
  */
 function createNewCrochetMesh(rounds, yarnMm) {
     const points = [];
-    // Increase heightStep for better vertical scale
+    // Increase heightStep for better vertical scale (1.5 is standard)
     const heightStep = (yarnMm / 10) * 1.5; 
 
     // 1. Generate Profile Points
@@ -545,31 +545,35 @@ function createNewCrochetMesh(rounds, yarnMm) {
     const newMesh = new THREE.Mesh(geometry, material);
     newMesh.name = "P2D_Object_" + Date.now();
 
-    // 3. System Integration - Essential for v5.48.11
+    // 3. System Integration - Essential for v5.48.11 Edit System
     newMesh.userData.isEgg = true;
     newMesh.userData.data = {
-        scale: new THREE.Vector3(1, 1, 1), // Standard scale
+        scale: new THREE.Vector3(1, 1, 1), 
         offsets: points.map(() => new THREE.Vector3(0, 0, 0)),
-        originalPoints: JSON.parse(JSON.stringify(points)) // Deep copy for learning
+        originalPoints: JSON.parse(JSON.stringify(points))
     };
 
-    // 4. Register to Scene and System
+    // 4. Register to Scene AND the Global 'eggs' array (CRITICAL)
     scene.add(newMesh);
+    if (Array.isArray(window.eggs)) {
+        window.eggs.push(newMesh); // 정식 리스트에 등록
+    }
+
+    // 5. Set as Global Target and Save History
     currentEgg = newMesh; 
 
-    // 5. CRITICAL: Force Engine Sync (Simulation of Undo/Action)
-    // This pushes the new object into the engine's active state
+    // Simulation of a formal action so Undo/Redo works
     if (typeof saveState === "function") {
-        saveState(); // If your engine has a history saver, call it
+        saveState(); 
     }
     
     // Position it center on grid
     newMesh.position.set(0, 0, 0);
 
-    // Refresh UI and Handles immediately
+    // Refresh everything
     if (typeof updateInfoDisplay === "function") updateInfoDisplay();
     
-    console.log("P2D Object Synchronized with Engine.");
+    console.log("P2D Object Fully Registered to Engine.");
 }
 
 /**
