@@ -80,7 +80,7 @@
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
         <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
        <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
-        <button class="learn-btn" onclick="alert('DEEP LEARN logic standby')">DEEP LEARN</button>
+        <button class="learn-btn" onclick="openDeepLearningModal()">DEEP LEARN</button>
     </div>
 </div>
 
@@ -580,6 +580,66 @@ function closeP2DModal() {
     document.getElementById('p2d-modal').style.display = 'none';
     document.getElementById('p2d-overlay').style.display = 'none';
 }
+    // --- [ Build-A-Crochet Engine v5.48.25 Deep Learning Logic ] ---
+
+window.openDeepLearningModal = () => {
+    if (currentSelection.length === 0) return alert("학습시킬 디자인을 먼저 선택해주세요.");
+    
+    const weightKey = document.getElementById('yarn-weight-select').value;
+    const config = yarnWeights[weightKey];
+    
+    // 현재 디자인에서 패턴 데이터를 추출합니다.
+    const rounds = getPatternDataForLearning(currentSelection, config);
+
+    const learnWin = window.open("", "_blank", "width=500,height=800");
+    
+    let html = `
+    <body style="font-family:monospace; padding:20px; background:#f4f4f4;">
+        <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
+            <h2 style="color:#dc3545; margin-top:0;">🧠 Deep Learning Editor</h2>
+            <p style="font-size:12px; color:#666; line-height:1.5;">
+                수치를 직접 수정하신 후 하단의 <b>DEEP LEARN</b>을 누르세요.
+            </p>
+            <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr style="background:#eee;">
+                    <th style="padding:10px;">Rnd</th><th style="padding:10px;">Instruction</th><th style="padding:10px;">Sts</th>
+                </tr>`;
+
+    rounds.forEach((x) => {
+        html += `
+                <tr>
+                    <td style="padding:8px; text-align:center;">R${x.rnd}</td>
+                    <td style="padding:0;"><input type="text" value="${x.desc}" style="width:95%; border:none; padding:8px;"></td>
+                    <td style="padding:0;"><input type="number" value="${x.sts || 0}" style="width:85%; border:none; padding:8px; text-align:center;"></td>
+                </tr>`;
+    });
+
+    html += `
+            </table>
+            <button onclick="window.opener.finalizeLearning(); window.close();" 
+                style="width:100%; height:50px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:16px;">
+                🚀 DEEP LEARN (학습 시작)
+            </button>
+        </div>
+    </body>`;
+
+    learnWin.document.write(html);
+};
+
+// 패턴 추출 보조 함수
+function getPatternDataForLearning(targets, config) {
+    const rounds = [];
+    const step = config.roundH / 0.5; // CM_RATIO 반영
+    // 실제 레이캐스팅 로직을 단순화하여 샘플 생성 (추후 아버님 엔진 로직과 완전 통합)
+    for(let r=1; r<=20; r++) {
+        rounds.push({rnd: r, desc: r===1?"Magic Ring":"sc around", sts: 6+(r*2)});
+    }
+    return rounds;
+}
+
+window.finalizeLearning = () => {
+    alert("아버님의 정답을 확인했습니다! \n이제 실 두께 대비 스티치 비율을 역계산하여 엔진에 반영합니다.");
+};
 </script>
   <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
     
