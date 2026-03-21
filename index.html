@@ -85,7 +85,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.23</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.24</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -519,10 +519,10 @@ function parsePatternText(text) {
  */
 function createNewCrochetMesh(rounds, yarnMm) {
     const points = [];
-    const heightStep = (yarnMm / 10) * 1.5; // Adjusted for CM_RATIO
+    const heightStep = (yarnMm / 10) * 1.5;
 
-    // 1. Point Generation
-    points.push(new THREE.Vector2(0.001, 0)); 
+    // 1. 포인트 생성 (엔진 규격에 맞게)
+    points.push(new THREE.Vector2(0.001, 0));
     rounds.forEach((rd, index) => {
         const radius = (rd.stitches * yarnMm) / Math.PI / 2 / 10; 
         const yPos = (index + 1) * heightStep;
@@ -530,8 +530,15 @@ function createNewCrochetMesh(rounds, yarnMm) {
     });
     points.push(new THREE.Vector2(0.001, (rounds.length + 1) * heightStep));
 
-    // 2. Mesh Creation
+    // 2. 지오메트리 생성 및 중심점 보정 (핵심!)
     const geometry = new THREE.LatheGeometry(points, 32);
+    
+    // 엔진의 createEgg처럼 중심을 맞추기 위해 전체 높이의 절반만큼 내립니다.
+    const totalH = (rounds.length + 1) * heightStep;
+    geometry.translate(0, -totalH / 2, 0); 
+    geometry.userData.origPos = geometry.attributes.position.clone();
+
+    // 3. 메쉬 및 재질 설정
     const material = new THREE.MeshStandardMaterial({ 
         color: 0x6f42c1, 
         side: THREE.DoubleSide,
@@ -540,27 +547,31 @@ function createNewCrochetMesh(rounds, yarnMm) {
     });
     const newMesh = new THREE.Mesh(geometry, material);
     
-    // 3. System Integration (The "Formal" Way)
+    // 4. 엔진 표준 데이터 구조 (오프셋 6개 고정)
     newMesh.userData.isEgg = true;
     newMesh.userData.data = {
         scale: new THREE.Vector3(1, 1, 1),
-        offsets: points.map(() => new THREE.Vector3(0, 0, 0))
+        // 엔진은 핸들이 6개이므로 오프셋도 6개여야 합니다.
+        offsets: [0,1,2,3,4,5].map(() => new THREE.Vector3(0, 0, 0))
     };
 
     scene.add(newMesh);
 
-    // 4. Update Engine Globals
+    // 5. 전역 변수 업데이트 및 즉시 갱신
     currentEgg = newMesh;
-    currentSelection = [newMesh]; // Now the engine knows it's selected
+    currentSelection = [newMesh];
 
-    // 5. Save History & UI
     if (typeof captureState === "function") captureState();
-    if (typeof updateInfoDisplay === "function") updateInfoDisplay();
     
-    // Auto-focus handles on the new object
-    if (typeof createHandles === "function") createHandles();
+    // UI 치수 업데이트 함수 (코드 327번줄 참고)
+    updateRealTimeSize(); 
+    
+    // 핸들 위치 재계산 및 표시
+    if (typeof createHandles === "function") {
+        updateSelectionVisuals([newMesh]); 
+    }
 
-    console.log("P2D Object successfully integrated into v5.48.22");
+    console.log("P2D Object successfully integrated into v5.48.23");
 }
 /**
  * NEW: The missing Modal Close function
