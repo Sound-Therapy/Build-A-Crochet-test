@@ -84,7 +84,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.48.27</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.48.28</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -628,28 +628,38 @@ window.openDeepLearningModal = () => {
 // --- [ Build-A-Crochet Engine v5.48.27: REAL GEOMETRY & UNIFIED LOGIC ] ---
 
 window.generatePatternWithLearning = () => {
-    // 1. Yarn Weight 가져오기 (ID 확인: yarn-select)
+    // 1. 실 설정 가져오기 (이미 아버님이 맞춰놓으신 yarn-select 사용)
     const weightSelect = document.getElementById('yarn-select');
     const weightKey = weightSelect ? weightSelect.value : "5.0";
     const config = yarnWeights[weightKey];
     
-    if (currentSelection.length === 0) return alert("Please select an object first.");
-    
-    // 모달 닫기
-    document.getElementById('p2d-modal').style.display = 'none';
-    document.getElementById('p2d-overlay').style.display = 'none';
+    // 2. 프로젝트 이름 (에러 방지를 위해 고정값 사용)
+    const pName = "New Project";
 
-    // 실제 지름 분석 엔진 가동
+    // 3. 모델 선택 여부 확인
+    if (currentSelection.length === 0) {
+        return alert("Please select a 3D object on the screen first!");
+    }
+    
+    // 4. 기존 설정창 닫기
+    const modal = document.getElementById('p2d-modal');
+    const overlay = document.getElementById('p2d-overlay');
+    if(modal) modal.style.display = 'none';
+    if(overlay) overlay.style.display = 'none';
+
+    // 5. 실제 3D 지름 분석 엔진 실행
     const rounds = getPatternDataForLearning(currentSelection, config);
 
-    // 수정 가능한 팝업창 열기
+    // 6. 수정 가능한 결과 팝업창 띄우기
     const editWin = window.open("", "_blank", "width=550,height=850");
+    if (!editWin) return alert("Please allow pop-ups for this site!");
     
     let html = `
     <body style="font-family:monospace; padding:20px; background:#f0f2f5;">
         <div style="background:white; padding:25px; border-radius:15px; box-shadow:0 10px 30px rgba(0,0,0,0.1);">
-            <h2 style="color:#2c3e50; margin-top:0;">📋 Pattern Editor</h2>
-            <p style="font-size:12px; color:#7f8c8d;">Yarn Weight: <b>${weightKey}</b></p>
+            <h2 style="color:#2c3e50; margin-top:0;">📋 Crochet Pattern Analysis</h2>
+            <p style="font-size:12px; color:#7f8c8d;">Target Yarn: <b>${config.label}</b></p>
+            <p style="font-size:11px; color:#e74c3c;">* You can edit the 'Sts' values below to calibrate the AI.</p>
             
             <table border="1" style="width:100%; border-collapse:collapse; margin-bottom:25px; background:white;">
                 <tr style="background:#ecf0f1; text-align:left;">
@@ -675,14 +685,13 @@ window.generatePatternWithLearning = () => {
             </table>
             <button onclick="window.opener.finalizeLearning(); window.close();" 
                 style="width:100%; height:55px; background:#27ae60; color:white; border:none; border-radius:12px; font-weight:bold; cursor:pointer; font-size:17px;">
-                🚀 SAVE & DEEP LEARN
+                💾 SAVE & CALIBRATE AI
             </button>
         </div>
     </body>`;
 
     editWin.document.write(html);
 };
-
 function getPatternDataForLearning(targets, config) {
     const rounds = [];
     const CM_RATIO = 0.5; 
@@ -749,7 +758,7 @@ window.finalizeLearning = () => {
         <textarea id="pattern-input" placeholder="Paste your pattern" style="width:100%; height:80px; margin-top:5px; padding:8px; border-radius:5px; border:1px solid #ccc; resize:none; font-size:11px;"></textarea>
     </div>
 
-    <button onclick="generateP2DDesign()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ Generate Design (Apply)</button>
+    <button onclick="generatePatternWithLearning()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ Generate Design (Apply)</button>
     
     <button onclick="document.getElementById('p2d-modal').style.display='none'; document.getElementById('p2d-overlay').style.display='none'" style="width:100%; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer; font-size:12px;">Close</button>
 </div>
