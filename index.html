@@ -514,8 +514,8 @@ function parsePatternText(text) {
  */
 function createNewCrochetMesh(rounds, yarnMm) {
     const points = [];
-    // Increase heightStep slightly for better visibility
-    const heightStep = (yarnMm / 10) * 1.2; 
+    // Increase heightStep for better vertical scale
+    const heightStep = (yarnMm / 10) * 1.5; 
 
     // 1. Generate Profile Points
     points.push(new THREE.Vector2(0.001, 0)); 
@@ -533,32 +533,38 @@ function createNewCrochetMesh(rounds, yarnMm) {
         color: 0x6f42c1, 
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.9 
+        opacity: 0.9,
+        flatShading: false 
     });
     
     const newMesh = new THREE.Mesh(geometry, material);
     newMesh.name = "P2D_Object_" + Date.now();
 
-    // 3. System Integration (Matching v5.48.11 standards)
+    // 3. System Integration - Essential for v5.48.11
     newMesh.userData.isEgg = true;
     newMesh.userData.data = {
-        // Set an initial base scale so it's not too small
-        scale: new THREE.Vector3(1.5, 1.5, 1.5), 
+        scale: new THREE.Vector3(1, 1, 1), // Standard scale
         offsets: points.map(() => new THREE.Vector3(0, 0, 0)),
-        originalPoints: points
+        originalPoints: JSON.parse(JSON.stringify(points)) // Deep copy for learning
     };
 
-    // 4. Add to Scene and Set as Global Target
+    // 4. Register to Scene and System
     scene.add(newMesh);
-    currentEgg = newMesh; // Tell the system THIS is the active object
+    currentEgg = newMesh; 
 
-    // 5. Force Update (The "Undo" effect without pressing Undo)
+    // 5. CRITICAL: Force Engine Sync (Simulation of Undo/Action)
+    // This pushes the new object into the engine's active state
+    if (typeof saveState === "function") {
+        saveState(); // If your engine has a history saver, call it
+    }
+    
+    // Position it center on grid
+    newMesh.position.set(0, 0, 0);
+
+    // Refresh UI and Handles immediately
     if (typeof updateInfoDisplay === "function") updateInfoDisplay();
     
-    // Position it slightly above the grid
-    newMesh.position.y = 0.5;
-
-    console.log("P2D Design Generated and Integrated.");
+    console.log("P2D Object Synchronized with Engine.");
 }
 
 /**
