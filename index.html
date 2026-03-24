@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet Engine v5.49.10</title>
+    <title>Build-A-Crochet Engine v5.49.11</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -87,7 +87,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.49.10</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.49.11</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -733,6 +733,129 @@
         return axis.normalize();
     }
 
+    function buildPlaneBasis(normal) {
+        const n = normal.clone().normalize();
+        const helper = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+        const u = new THREE.Vector3().crossVectors(n, helper).normalize();
+        const v = new THREE.Vector3().crossVectors(n, u).normalize();
+        return { u, v, n };
+    }
+
+    function sampleSliceShapeStats(vertices, planePoint, axisDir, bandHalfThickness) {
+        if (!vertices || !vertices.length) return null;
+        const basis = buildPlaneBasis(axisDir);
+        const pts2 = [];
+        const thickness = Math.max(1e-4, bandHalfThickness || 0.1);
+        vertices.forEach(p => {
+            const rel = p.clone().sub(planePoint);
+            const d = rel.dot(basis.n);
+            if (Math.abs(d) > thickness) return;
+            pts2.push({
+                x: rel.dot(basis.u),
+                y: rel.dot(basis.v)
+            });
+        });
+        if (pts2.length < 8) return null;
+
+        let meanX = 0, meanY = 0;
+        pts2.forEach(p => { meanX += p.x; meanY += p.y; });
+        meanX /= pts2.length;
+        meanY /= pts2.length;
+
+        let xx = 0, xy = 0, yy = 0;
+        pts2.forEach(p => {
+            const dx = p.x - meanX;
+            const dy = p.y - meanY;
+            xx += dx * dx;
+            xy += dx * dy;
+            yy += dy * dy;
+        });
+        xx /= pts2.length;
+        xy /= pts2.length;
+        yy /= pts2.length;
+
+        const tr = xx + yy;
+        const det = (xx * yy) - (xy * xy);
+        const delta = Math.sqrt(Math.max(0, (tr * tr * 0.25) - det));
+        const l1 = Math.max(1e-9, (tr * 0.5) + delta);
+        const l2 = Math.max(1e-9, (tr * 0.5) - delta);
+        const major = Math.sqrt(Math.max(l1, l2));
+        const minor = Math.sqrt(Math.min(l1, l2));
+        const ar = major / Math.max(1e-6, minor);
+
+        return {
+            ar,
+            majorCmProxy: major * CM_RATIO * 2,
+            minorCmProxy: minor * CM_RATIO * 2,
+            pointCount: pts2.length
+        };
+    }
+
+    function estimateEllipseAxesFromPerimeter(perimeterCm, ar = 1) {
+        const ratio = Math.max(1, Math.min(4, ar || 1));
+        const p = Math.max(0.05, perimeterCm || 0.05);
+        if (!Number.isFinite(p)) return { a: p / (2 * Math.PI), b: p / (2 * Math.PI) };
+        if (Math.abs(ratio - 1) < 1e-3) {
+            const r = p / (2 * Math.PI);
+            return { a: r, b: r };
+        }
+
+        const ellipsePerimeter = (a, b) => {
+            const h = Math.pow(a - b, 2) / Math.pow(a + b, 2);
+            return Math.PI * (a + b) * (1 + ((3 * h) / (10 + Math.sqrt(Math.max(1e-9, 4 - (3 * h))))));
+        };
+
+        let lo = 0.001;
+        let hi = Math.max(0.05, p);
+        for (let i = 0; i < 24; i++) {
+            const mid = (lo + hi) * 0.5;
+            const est = ellipsePerimeter(mid * ratio, mid);
+            if (est > p) hi = mid;
+            else lo = mid;
+        }
+        const b = (lo + hi) * 0.5;
+        const a = b * ratio;
+        return { a, b };
+    }
+
+    function chooseStartTemplate(features) {
+        const roundDefault = { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 };
+        if (!features) return roundDefault;
+
+        const meanAR = features.meanAR || 1;
+        const growth = features.earlyGrowth || 0;
+        const stability = features.stability || 0;
+        const firstCirc = Math.max(0.05, features.firstCircumferenceCm || 0.05);
+        const stitchWidthCm = Math.max(0.1, features.stitchWidthCm || 0.3);
+        const approxStart = Math.max(4, Math.round(firstCirc / stitchWidthCm));
+
+        if (meanAR >= 1.35) {
+            const axes = estimateEllipseAxesFromPerimeter(firstCirc, meanAR);
+            const straightLenCm = Math.max(0, (2 * axes.a) - (2 * axes.b));
+            const chainCount = Math.max(3, Math.round(straightLenCm / stitchWidthCm) + 2);
+            const totalStart = Math.max(8, Math.round((approxStart + 2) / 2) * 2);
+            return {
+                kind: "oval",
+                startSts: totalStart,
+                desc: `ch ${chainCount}, oval start (sc around chain)`,
+                snapBase: 2,
+                chainCount
+            };
+        }
+
+        if (firstCirc >= stitchWidthCm * 10 && growth < 0.12) {
+            const startSts = Math.max(8, Math.min(12, Math.round(approxStart / 2) * 2));
+            return { kind: "flat", startSts, desc: `${startSts} sc in magic ring`, snapBase: 4 };
+        }
+
+        if (growth < 0.18 && stability < 0.16) {
+            const startSts = Math.max(6, Math.min(8, Math.round(approxStart / 2) * 2));
+            return { kind: "tube", startSts, desc: `${startSts} sc in magic ring`, snapBase: 2 };
+        }
+
+        return roundDefault;
+    }
+
     function buildRoundsFromSlices(targets, weightKey, config, sliceAxis = null) {
         const axisWorld = sliceAxis && sliceAxis.start && sliceAxis.end ? {
             start: sliceAxis.start.clone(),
@@ -748,7 +871,15 @@
         if (!cloud.vertices.length) {
             const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
             const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
-            return { rounds: fallback, profiles, stitchWidthCm, stepCm, signature, axisMode: axisWorld ? "custom" : "pca" };
+            return {
+                rounds: fallback,
+                profiles,
+                stitchWidthCm,
+                stepCm,
+                signature,
+                axisMode: axisWorld ? "custom" : "pca",
+                startTemplate: { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 }
+            };
         }
 
         let axisStart;
@@ -775,13 +906,22 @@
         if (!Number.isFinite(axisLen) || axisLen < 1e-6) {
             const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
             const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
-            return { rounds: fallback, profiles, stitchWidthCm, stepCm, signature, axisMode: axisWorld ? "custom" : "pca" };
+            return {
+                rounds: fallback,
+                profiles,
+                stitchWidthCm,
+                stepCm,
+                signature,
+                axisMode: axisWorld ? "custom" : "pca",
+                startTemplate: { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 }
+            };
         }
 
         const axisDir = axisVec.clone().normalize();
         const stepWorld = Math.max(0.12, stepCm / CM_RATIO);
         const sliceCount = Math.max(4, Math.min(260, Math.round(axisLen / stepWorld) + 1));
         const orderedSlices = [];
+        const earlyShapeSamples = [];
 
         for (let i = 0; i < sliceCount; i++) {
             const t = sliceCount <= 1 ? 0 : (i / (sliceCount - 1));
@@ -798,27 +938,56 @@
 
             const circumferenceCm = Math.max(0.05, perimeterWorld * CM_RATIO);
             const rawSts = Math.max(1, Math.round(circumferenceCm / Math.max(0.1, stitchWidthCm)));
-            const snappedSts = Math.max(6, Math.round(rawSts / 6) * 6);
             orderedSlices.push({
                 distanceCm: (axisLen * t) * CM_RATIO,
                 circumferenceCm,
-                sts: snappedSts
+                sts: Math.max(4, rawSts)
             });
+
+            if (i < Math.min(5, sliceCount)) {
+                const shape = sampleSliceShapeStats(cloud.vertices, pointOnAxis, axisDir, stepWorld * 0.55);
+                if (shape) earlyShapeSamples.push(shape);
+            }
         }
+
+        const meanAR = earlyShapeSamples.length
+            ? earlyShapeSamples.reduce((s, x) => s + x.ar, 0) / earlyShapeSamples.length
+            : 1;
+        const stability = earlyShapeSamples.length > 1
+            ? (() => {
+                const m = meanAR;
+                const variance = earlyShapeSamples.reduce((s, x) => s + Math.pow(x.ar - m, 2), 0) / earlyShapeSamples.length;
+                return Math.sqrt(Math.max(0, variance)) / Math.max(1e-6, m);
+            })()
+            : 0;
+        const earlyCount = Math.min(4, orderedSlices.length);
+        const firstCirc = orderedSlices[0]?.circumferenceCm || (stitchWidthCm * 6);
+        const earlyLastCirc = orderedSlices[Math.max(0, earlyCount - 1)]?.circumferenceCm || firstCirc;
+        const earlyGrowth = (earlyLastCirc - firstCirc) / Math.max(1e-6, firstCirc);
+        const startTemplate = chooseStartTemplate({
+            meanAR,
+            earlyGrowth,
+            stability,
+            firstCircumferenceCm: firstCirc,
+            stitchWidthCm
+        });
+        const snapBase = Math.max(2, startTemplate.snapBase || 6);
 
         const smoothedSts = orderedSlices.map((slice, i) => {
             const prev = orderedSlices[Math.max(0, i - 1)].sts;
             const cur = slice.sts;
             const next = orderedSlices[Math.min(orderedSlices.length - 1, i + 1)].sts;
-            return Math.max(6, Math.round(((prev + cur + next) / 3) / 6) * 6);
+            const averaged = (prev + cur + next) / 3;
+            const minSts = Math.max(4, startTemplate.startSts || 6);
+            return Math.max(minSts, Math.round(averaged / snapBase) * snapBase);
         });
 
-        const rounds = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+        const rounds = [{ rnd: 1, desc: startTemplate.desc, sts: startTemplate.startSts }];
         const profiles = [{ rnd: 1, distanceCm: orderedSlices[0].distanceCm, circumferenceCm: orderedSlices[0].circumferenceCm }];
 
-        let prevSts = 6;
+        let prevSts = startTemplate.startSts;
         for (let i = 1; i < smoothedSts.length; i++) {
-            const targetSts = Math.max(6, smoothedSts[i]);
+            const targetSts = Math.max(Math.max(4, startTemplate.startSts), smoothedSts[i]);
             const delta = targetSts - prevSts;
             let desc = "sc around";
             if (delta > 0) desc = `inc x${delta}`;
@@ -848,19 +1017,25 @@
             stitchWidthCm,
             stepCm,
             signature,
-            axisMode: axisWorld ? "custom" : "pca"
+            axisMode: axisWorld ? "custom" : "pca",
+            startTemplate
         };
     }
 
 
-    function validatePattern(rounds) {
+    function validatePattern(rounds, meta = null) {
         const warnings = [];
         if (!rounds.length) {
             warnings.push("No rounds generated.");
             return warnings;
         }
+        const kind = meta && meta.kind ? meta.kind : "round";
+        const expectedStart = meta && Number.isFinite(meta.startSts) ? meta.startSts : 6;
         if (rounds[0].rnd !== 1) warnings.push("Pattern should start at R1.");
-        if (rounds[0].sts !== 6) warnings.push("R1 should start at 6 stitches for standard amigurumi.");
+        if (kind === "round" && rounds[0].sts !== 6) warnings.push("R1 should start at 6 stitches for standard amigurumi.");
+        if ((kind === "oval" || kind === "flat" || kind === "tube") && Math.abs(rounds[0].sts - expectedStart) > 2) {
+            warnings.push(`R1 start stitches differ from selected ${kind} template.`);
+        }
 
         for (let i = 1; i < rounds.length; i++) {
             const prev = rounds[i - 1];
@@ -871,7 +1046,10 @@
             if (kind === "inc" && delta <= 0) warnings.push(`R${cur.rnd} increase row should raise stitch count.`);
             if (kind === "dec" && delta >= 0) warnings.push(`R${cur.rnd} decrease row should lower stitch count.`);
         }
-        if (rounds[rounds.length - 1].sts > 8) warnings.push("Final round is not closed enough (expected near 6).");
+        const finalThreshold = kind === "round" ? 8 : Math.max(10, expectedStart + 2);
+        if (rounds[rounds.length - 1].sts > finalThreshold) {
+            warnings.push(`Final round is not closed enough for ${kind} template.`);
+        }
         return warnings;
     }
 
@@ -951,7 +1129,8 @@
             stitchWidthCm: generated.stitchWidthCm,
             stepCm: generated.stepCm,
             signature: designSignature,
-            axisMode: generated.axisMode
+            axisMode: generated.axisMode,
+            startTemplate: generated.startTemplate || null
         };
 
         // Build result popup (editable + deep learn)
@@ -960,7 +1139,7 @@
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
             <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
                 <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.10</p>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.11</p>
                 <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
                     <tr style="background:#eee;">
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
@@ -977,7 +1156,7 @@
                         </td>
                      </tr>`;
         });
-        const warnings = validatePattern(rounds);
+        const warnings = validatePattern(rounds, generated.startTemplate);
         const warningHtml = warnings.length
             ? `<div style="margin-top:10px; padding:8px; border:1px solid #f1c40f; background:#fff8db; color:#7a5d00; font-size:11px;">⚠ ${warnings.join("<br>")}</div>`
             : `<div style="margin-top:10px; padding:8px; border:1px solid #b7ebc6; background:#effbf3; color:#1f7a36; font-size:11px;">Pattern validation: OK</div>`;
@@ -1330,7 +1509,7 @@
         history.push(str); redoStack=[]; if(history.length>40) history.shift(); updateNavButtons();
     }
     function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{scene.remove(e);}); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e) {} }
-    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.10_${Date.now()}.json`; a.click();};
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.11_${Date.now()}.json`; a.click();};
     window.triggerFileSelect=()=>document.getElementById('file-input').click();
     window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
 
@@ -1467,7 +1646,7 @@ function createNewCrochetMesh(rounds, yarnMm) {
         updateSelectionVisuals([newMesh]); 
     }
 
-    console.log("P2D Object successfully integrated into v5.49.10");
+    console.log("P2D Object successfully integrated into v5.49.11");
 }
 /**
  * NEW: The missing Modal Close function
@@ -1476,7 +1655,7 @@ function closeP2DModal() {
     document.getElementById('p2d-modal').style.display = 'none';
     document.getElementById('p2d-overlay').style.display = 'none';
 }
-    // --- [ Build-A-Crochet Engine v5.49.10 Deep Learning Logic ] ---
+    // --- [ Build-A-Crochet Engine v5.49.11 Deep Learning Logic ] ---
 
 window.openDeepLearningModal = () => {
     if (currentSelection.length === 0) return alert("Select a design to train first.");
