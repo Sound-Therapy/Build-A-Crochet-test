@@ -84,7 +84,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.49.3</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.49.4</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -170,7 +170,7 @@
         return "sc";
     }
 
-    function buildDesignSignature(targets, weightKey) {
+    function buildDesignSignature(targets, weightKey, startPole = null) {
         const box = new THREE.Box3();
         targets.forEach(obj => {
             obj.geometry.computeBoundingBox();
@@ -180,6 +180,7 @@
         const center = box.getCenter(new THREE.Vector3());
         return {
             weightKey,
+            startPole,
             count: targets.length,
             w: Number((size.x * CM_RATIO).toFixed(2)),
             h: Number((size.y * CM_RATIO).toFixed(2)),
@@ -193,6 +194,7 @@
     function signatureDistance(a, b) {
         if (!a || !b) return Infinity;
         if (a.weightKey !== b.weightKey) return Infinity;
+        if ((a.startPole || null) !== (b.startPole || null)) return Infinity;
         const dc = Math.abs((a.count || 0) - (b.count || 0)) * 2.0;
         const ds = Math.abs((a.w || 0) - (b.w || 0)) + Math.abs((a.h || 0) - (b.h || 0)) + Math.abs((a.d || 0) - (b.d || 0));
         const dp = (Math.abs((a.cx || 0) - (b.cx || 0)) + Math.abs((a.cy || 0) - (b.cy || 0)) + Math.abs((a.cz || 0) - (b.cz || 0))) * 0.25;
@@ -394,49 +396,106 @@
     }
 
     function buildRoundsFromSlices(targets, weightKey, config, startPole = 'bottom') {
-        const signature = buildDesignSignature(targets, weightKey);
+        const signature = buildDesignSignature(targets, weightKey, startPole);
         const stepCm = Math.max(0.1, config.roundH);
         const stitchWidthCm = learningState.stitchWidthByWeight[weightKey] || getDefaultStitchWidthCm(config);
 
-        // Deterministic sphere math:
-        // 1) Equator stitches from circumference pi*D
-        // 2) Increase/decrease by 6 stitches per round
-        // 3) Middle sc rounds from target height
-        const diameterCm = Math.max(0.5, ((signature.w || 0) + (signature.d || 0)) * 0.5);
-        const circumferenceCm = Math.PI * diameterCm;
-        const targetMaxStsRaw = Math.max(6, Math.round(circumferenceCm / Math.max(0.1, stitchWidthCm)));
-        const targetMaxSts = Math.max(6, Math.round(targetMaxStsRaw / 6) * 6);
-        const incRounds = Math.max(1, Math.round(targetMaxSts / 6) - 1);
-
-        const estTotalRounds = Math.max((incRounds * 2) + 1, Math.round(Math.max(0.5, signature.h || diameterCm) / stepCm));
-        const scRounds = Math.max(0, estTotalRounds - ((incRounds * 2) + 1));
-
-        const rounds = [];
-        rounds.push({ rnd: 1, desc: "6 sc in magic ring", sts: 6 });
-
-        let rowIndex = 2;
-        for (let i = 1; i <= incRounds; i++) {
-            const sts = 6 * (i + 1);
-            const desc = i === 1 ? "inc x6" : `(${i - 1} sc, inc) x6`;
-            rounds.push({ rnd: rowIndex++, desc, sts });
-        }
-        for (let i = 0; i < scRounds; i++) {
-            rounds.push({ rnd: rowIndex++, desc: "sc around", sts: targetMaxSts });
-        }
-        for (let i = incRounds; i >= 1; i--) {
-            const sts = 6 * i;
-            const desc = i === 1 ? "dec x6" : `(${i - 1} sc, dec) x6`;
-            rounds.push({ rnd: rowIndex++, desc, sts });
+        const cloud = getVertexCloud(targets);
+        if (!cloud.vertices.length) {
+            const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+            const profiles = [{ rnd: 1, y: 0, circumferenceCm: stitchWidthCm * 6, startPole }];
+            return { rounds: fallback, profiles, stitchWidthCm, stepCm, startPole };
         }
 
-        if (rounds.length >= 4) {
-            const stuffIdx = rounds.length - 3;
-            rounds[stuffIdx].desc = `${rounds[stuffIdx].desc} | stuff firmly`;
+        const heightWorld = Math.max(0.001, cloud.maxY - cloud.minY);
+        const stepWorld = Math.max(0.12, stepCm / CM_RATIO);
+        const sliceCount = Math.max(4, Math.min(260, Math.round(heightWorld / stepWorld) + 1));
+        const sampleBand = Math.max(0.3, stepWorld * 0.75);
+
+        const orderedSlices = [];
+        for (let i = 0; i < sliceCount; i++) {
+            const t = sliceCount <= 1 ? 0 : (i / (sliceCount - 1));
+            const y = startPole === 'top'
+                ? (cloud.maxY - (t * heightWorld))
+                : (cloud.minY + (t * heightWorld));
+
+            let maxRadius = 0;
+            let hits = 0;
+            for (let vIndex = 0; vIndex < cloud.vertices.length; vIndex++) {
+                const v = cloud.vertices[vIndex];
+                if (Math.abs(v.y - y) > sampleBand) continue;
+                const dx = v.x - cloud.centerX;
+                const dz = v.z - cloud.centerZ;
+                const radius = Math.sqrt((dx * dx) + (dz * dz));
+                if (radius > maxRadius) maxRadius = radius;
+                hits += 1;
+            }
+
+            if (hits === 0) {
+                let nearest = null;
+                let nearestDy = Infinity;
+                for (let vIndex = 0; vIndex < cloud.vertices.length; vIndex++) {
+                    const v = cloud.vertices[vIndex];
+                    const dy = Math.abs(v.y - y);
+                    if (dy < nearestDy) {
+                        nearestDy = dy;
+                        nearest = v;
+                    }
+                }
+                if (nearest) {
+                    const dx = nearest.x - cloud.centerX;
+                    const dz = nearest.z - cloud.centerZ;
+                    maxRadius = Math.sqrt((dx * dx) + (dz * dz));
+                }
+            }
+
+            const radiusCm = Math.max(0.05, maxRadius * CM_RATIO);
+            const circumferenceCm = 2 * Math.PI * radiusCm;
+            const rawSts = Math.max(1, Math.round(circumferenceCm / Math.max(0.1, stitchWidthCm)));
+            const snappedSts = Math.max(6, Math.round(rawSts / 6) * 6);
+            orderedSlices.push({ y, circumferenceCm, sts: snappedSts });
         }
 
-        const profiles = [{ rnd: 1, circumferenceCm, y: 0, startPole }];
-        return { rounds, profiles, stitchWidthCm, stepCm, startPole };
+        const smoothedSts = orderedSlices.map((slice, i) => {
+            const prev = orderedSlices[Math.max(0, i - 1)].sts;
+            const cur = slice.sts;
+            const next = orderedSlices[Math.min(orderedSlices.length - 1, i + 1)].sts;
+            return Math.max(6, Math.round(((prev + cur + next) / 3) / 6) * 6);
+        });
+
+        const rounds = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+        const profiles = [{ rnd: 1, y: orderedSlices[0].y, circumferenceCm: orderedSlices[0].circumferenceCm, startPole }];
+
+        let prevSts = 6;
+        for (let i = 1; i < smoothedSts.length; i++) {
+            const targetSts = Math.max(6, smoothedSts[i]);
+            const delta = targetSts - prevSts;
+            let desc = "sc around";
+            if (delta > 0) desc = `inc x${delta}`;
+            else if (delta < 0) desc = `dec x${Math.abs(delta)}`;
+
+            rounds.push({ rnd: rounds.length + 1, desc, sts: targetSts });
+            profiles.push({ rnd: rounds.length, y: orderedSlices[i].y, circumferenceCm: orderedSlices[i].circumferenceCm, startPole });
+            prevSts = targetSts;
+        }
+
+        // reduce noise by collapsing long duplicate runs.
+        const compact = [rounds[0]];
+        for (let i = 1; i < rounds.length; i++) {
+            const row = rounds[i];
+            const prev = compact[compact.length - 1];
+            if (row.desc === "sc around" && prev.desc === "sc around" && row.sts === prev.sts) continue;
+            compact.push({ rnd: compact.length + 1, desc: row.desc, sts: row.sts });
+        }
+
+        if (compact.length >= 4) {
+            const stuffIdx = compact.length - 3;
+            compact[stuffIdx].desc = `${compact[stuffIdx].desc} | stuff firmly`;
+        }
+
+        return { rounds: compact, profiles, stitchWidthCm, stepCm, startPole, signature };
     }
+
 
     function validatePattern(rounds) {
         const warnings = [];
@@ -514,7 +573,7 @@
 
         const generated = buildRoundsFromSlices(targets, weightKey, config, startPole);
         let rounds = generated.rounds;
-        const designSignature = buildDesignSignature(targets, weightKey);
+        const designSignature = buildDesignSignature(targets, weightKey, startPole);
         const learnedSample = getBestLearnedPattern(designSignature);
         if (learnedSample) {
             const learnedRows = normalizeEditedRows(learnedSample.corrected);
