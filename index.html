@@ -19,6 +19,8 @@
         .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
         .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
         .pattern-btn { width: 85px; background: #007bff; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
+        .axis-btn { width: 85px; background: #495057; color: white; height: 32px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
+        .axis-btn.active { background: #20c997; }
         .p2d-btn { width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top:5px;}
         .learn-btn { width: 85px; background: #dc3545; color: white; height: 35px; border: 2px solid #fff; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 9px; margin-top:5px;}
 
@@ -79,12 +81,13 @@
     
     <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
         <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
+        <button id="axis-pick-btn" class="axis-btn" onclick="toggleAxisPickMode()">AXIS</button>
        <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
     </div>
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.49.5</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.49.6</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -105,6 +108,10 @@
     let groupGizmo, groupHandles = [], groupRotHandles = [];
     let patternStartMarkers = [];
     let selectedPatternStart = null;
+    let axisPickMarkers = [];
+    let selectedSliceAxis = null;
+    let isAxisPickMode = false;
+    let axisPickStage = "start";
     let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
     let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
@@ -170,7 +177,7 @@
         return "sc";
     }
 
-    function buildDesignSignature(targets, weightKey, startPole = null) {
+    function buildDesignSignature(targets, weightKey, axisKey = null) {
         const box = new THREE.Box3();
         targets.forEach(obj => {
             obj.geometry.computeBoundingBox();
@@ -180,7 +187,7 @@
         const center = box.getCenter(new THREE.Vector3());
         return {
             weightKey,
-            startPole,
+            axisKey,
             count: targets.length,
             w: Number((size.x * CM_RATIO).toFixed(2)),
             h: Number((size.y * CM_RATIO).toFixed(2)),
@@ -194,7 +201,7 @@
     function signatureDistance(a, b) {
         if (!a || !b) return Infinity;
         if (a.weightKey !== b.weightKey) return Infinity;
-        if ((a.startPole || null) !== (b.startPole || null)) return Infinity;
+        if ((a.axisKey || null) !== (b.axisKey || null)) return Infinity;
         const dc = Math.abs((a.count || 0) - (b.count || 0)) * 2.0;
         const ds = Math.abs((a.w || 0) - (b.w || 0)) + Math.abs((a.h || 0) - (b.h || 0)) + Math.abs((a.d || 0) - (b.d || 0));
         const dp = (Math.abs((a.cx || 0) - (b.cx || 0)) + Math.abs((a.cy || 0) - (b.cy || 0)) + Math.abs((a.cz || 0) - (b.cz || 0))) * 0.25;
@@ -337,80 +344,117 @@
         updatePatternStartMarkerVisuals();
     }
 
-    function getPatternStartLabel(pole) {
-        return pole === 'top' ? 'Top' : 'Bottom';
+    function clearSliceAxisSelection() {
+        selectedSliceAxis = null;
+        axisPickStage = "start";
+        updateAxisPickMarkers();
     }
 
-    function getPatternMarkerLocalPoints(egg) {
-        if (!egg || !egg.geometry) return null;
-        egg.geometry.computeBoundingBox();
-        const box = egg.geometry.boundingBox;
-        if (!box) return null;
-        const centerX = (box.min.x + box.max.x) * 0.5;
-        const centerZ = (box.min.z + box.max.z) * 0.5;
-        return {
-            top: new THREE.Vector3(centerX, box.max.y, centerZ),
-            bottom: new THREE.Vector3(centerX, box.min.y, centerZ)
-        };
+    function getAxisMarkerColor(kind) {
+        return kind === "start" ? 0x00d1ff : 0xffa94d;
     }
 
     function updatePatternStartMarkerVisuals() {
-        patternStartMarkers.forEach(marker => {
-            const isSelected = selectedPatternStart
-                && selectedPatternStart.egg === marker.userData.egg
-                && selectedPatternStart.pole === marker.userData.pole;
-            marker.material.color.set(isSelected ? 0x00c853 : 0xffffff);
-            marker.material.opacity = isSelected ? 1.0 : 0.9;
-            marker.scale.setScalar(isSelected ? 1.2 : 1.0);
-        });
+        patternStartMarkers.forEach(marker => marker.visible = false);
     }
 
     function updatePatternStartMarkers() {
-        if (currentSelection.length !== 1 || !currentEgg) {
-            patternStartMarkers.forEach(marker => marker.visible = false);
-            return;
-        }
-
-        const localPoints = getPatternMarkerLocalPoints(currentEgg);
-        if (!localPoints) {
-            patternStartMarkers.forEach(marker => marker.visible = false);
-            return;
-        }
-
-        const box = currentEgg.geometry.boundingBox;
-        const padding = Math.max(1.8, (box.max.y - box.min.y) * 0.08);
-        const worldTop = localPoints.top.clone().applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-        const worldBottom = localPoints.bottom.clone().applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
-        const upDir = new THREE.Vector3(0, 1, 0).applyQuaternion(currentEgg.quaternion).normalize();
-
-        patternStartMarkers.forEach(marker => {
-            marker.userData.egg = currentEgg;
-            marker.visible = true;
-            const offset = marker.userData.pole === 'top'
-                ? upDir.clone().multiplyScalar(padding)
-                : upDir.clone().multiplyScalar(-padding);
-            marker.position.copy(marker.userData.pole === 'top' ? worldTop : worldBottom).add(offset);
-        });
-
-        updatePatternStartMarkerVisuals();
+        patternStartMarkers.forEach(marker => marker.visible = false);
     }
 
-    function interpolatePointAtY(p1, p2, y) {
-        const dy = p2.y - p1.y;
-        if (Math.abs(dy) < 1e-8) return p1.clone();
-        const t = (y - p1.y) / dy;
+    function getSliceAxisWorldPoints() {
+        if (!selectedSliceAxis || !selectedSliceAxis.egg || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) return null;
+        const egg = selectedSliceAxis.egg;
+        return {
+            egg,
+            start: selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld),
+            end: selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld)
+        };
+    }
+
+    function updateAxisPickMarkers() {
+        axisPickMarkers.forEach(marker => marker.visible = false);
+        if (!selectedSliceAxis || !selectedSliceAxis.egg) return;
+
+        const egg = selectedSliceAxis.egg;
+        if (selectedSliceAxis.startLocal) {
+            const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
+            axisPickMarkers[0].visible = true;
+            axisPickMarkers[0].position.copy(startW);
+            axisPickMarkers[0].material.color.set(getAxisMarkerColor("start"));
+        }
+        if (selectedSliceAxis.endLocal) {
+            const endW = selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld);
+            axisPickMarkers[1].visible = true;
+            axisPickMarkers[1].position.copy(endW);
+            axisPickMarkers[1].material.color.set(getAxisMarkerColor("end"));
+        }
+    }
+
+    function getAxisDescriptor(worldAxis) {
+        const dir = worldAxis.end.clone().sub(worldAxis.start);
+        const len = dir.length();
+        if (!Number.isFinite(len) || len < 1e-6) return "axis_invalid";
+        dir.normalize();
+        return `${dir.x.toFixed(2)}_${dir.y.toFixed(2)}_${dir.z.toFixed(2)}_${(len * CM_RATIO).toFixed(2)}`;
+    }
+
+    function setSliceAxisPoint(egg, worldPoint) {
+        if (!egg || !worldPoint) return;
+        if (!selectedSliceAxis || selectedSliceAxis.egg !== egg || axisPickStage === "start") {
+            selectedSliceAxis = {
+                egg,
+                startLocal: egg.worldToLocal(worldPoint.clone()),
+                endLocal: null
+            };
+            axisPickStage = "end";
+        } else {
+            const endLocal = egg.worldToLocal(worldPoint.clone());
+            const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
+            const endW = endLocal.clone().applyMatrix4(egg.matrixWorld);
+            if (startW.distanceTo(endW) < 0.3) {
+                alert("시작점과 끝점 거리가 너무 짧습니다. 다시 선택해주세요.");
+                return;
+            }
+            selectedSliceAxis.endLocal = endLocal;
+            axisPickStage = "start";
+            isAxisPickMode = false;
+            document.getElementById('axis-pick-btn').classList.remove('active');
+        }
+        updateAxisPickMarkers();
+    }
+
+    window.toggleAxisPickMode = () => {
+        if (!isAxisPickMode) {
+            clearSliceAxisSelection();
+            axisPickStage = "start";
+            isAxisPickMode = true;
+            document.getElementById('axis-pick-btn').classList.add('active');
+            alert("축 선택 모드: 오브젝트에서 시작점을 클릭한 뒤 끝점을 클릭하세요.");
+            return;
+        }
+        isAxisPickMode = false;
+        axisPickStage = "start";
+        document.getElementById('axis-pick-btn').classList.remove('active');
+    };
+
+
+    function interpolatePointByDistance(p1, p2, d1, d2) {
+        const denom = d1 - d2;
+        if (Math.abs(denom) < 1e-8) return p1.clone();
+        const t = d1 / denom;
         return p1.clone().lerp(p2, Math.min(1, Math.max(0, t)));
     }
 
-    function trianglePlaneIntersectionSegmentY(a, b, c, y, eps = 1e-5) {
+    function trianglePlaneIntersectionSegment(a, b, c, planePoint, planeNormal, eps = 1e-5) {
         const points = [];
         const edges = [[a, b], [b, c], [c, a]];
 
         for (let i = 0; i < edges.length; i++) {
             const p1 = edges[i][0];
             const p2 = edges[i][1];
-            const d1 = p1.y - y;
-            const d2 = p2.y - y;
+            const d1 = p1.clone().sub(planePoint).dot(planeNormal);
+            const d2 = p2.clone().sub(planePoint).dot(planeNormal);
 
             if (Math.abs(d1) <= eps && Math.abs(d2) <= eps) continue;
             if (Math.abs(d1) <= eps) {
@@ -422,7 +466,7 @@
                 continue;
             }
             if ((d1 < 0 && d2 > 0) || (d1 > 0 && d2 < 0)) {
-                points.push(interpolatePointAtY(p1, p2, y));
+                points.push(interpolatePointByDistance(p1, p2, d1, d2));
             }
         }
 
@@ -454,7 +498,7 @@
         return [unique[0], unique[1]];
     }
 
-    function getSlicePerimeterWorld(targets, y, eps = 1e-5) {
+    function getSlicePerimeterWorld(targets, planePoint, planeNormal, eps = 1e-5) {
         const uniqueSegments = new Map();
 
         targets.forEach(obj => {
@@ -473,7 +517,7 @@
                 const b = new THREE.Vector3(pos.getX(ib), pos.getY(ib), pos.getZ(ib)).applyMatrix4(matrix);
                 const c = new THREE.Vector3(pos.getX(ic), pos.getY(ic), pos.getZ(ic)).applyMatrix4(matrix);
 
-                const seg = trianglePlaneIntersectionSegmentY(a, b, c, y, eps);
+                const seg = trianglePlaneIntersectionSegment(a, b, c, planePoint, planeNormal, eps);
                 if (!seg) continue;
 
                 const k1 = `${seg[0].x.toFixed(5)}|${seg[0].y.toFixed(5)}|${seg[0].z.toFixed(5)}`;
@@ -490,42 +534,107 @@
         return perimeter;
     }
 
-    function buildRoundsFromSlices(targets, weightKey, config, startPole = 'bottom') {
-        const signature = buildDesignSignature(targets, weightKey, startPole);
+    function estimatePrincipalAxis(vertices) {
+        if (!vertices || vertices.length === 0) return new THREE.Vector3(0, 1, 0);
+        let mean = new THREE.Vector3();
+        vertices.forEach(v => mean.add(v));
+        mean.multiplyScalar(1 / vertices.length);
+
+        let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+        vertices.forEach(v => {
+            const x = v.x - mean.x;
+            const y = v.y - mean.y;
+            const z = v.z - mean.z;
+            xx += x * x; xy += x * y; xz += x * z;
+            yy += y * y; yz += y * z; zz += z * z;
+        });
+
+        let axis = new THREE.Vector3(0.37, 0.91, 0.17).normalize();
+        for (let i = 0; i < 12; i++) {
+            const nx = (xx * axis.x) + (xy * axis.y) + (xz * axis.z);
+            const ny = (xy * axis.x) + (yy * axis.y) + (yz * axis.z);
+            const nz = (xz * axis.x) + (yz * axis.y) + (zz * axis.z);
+            axis.set(nx, ny, nz);
+            if (axis.lengthSq() < 1e-12) {
+                axis.set(0, 1, 0);
+                break;
+            }
+            axis.normalize();
+        }
+        return axis.normalize();
+    }
+
+    function buildRoundsFromSlices(targets, weightKey, config, sliceAxis = null) {
+        const axisWorld = sliceAxis && sliceAxis.start && sliceAxis.end ? {
+            start: sliceAxis.start.clone(),
+            end: sliceAxis.end.clone(),
+            mode: "custom"
+        } : null;
+
+        const signature = buildDesignSignature(targets, weightKey, axisWorld ? getAxisDescriptor(axisWorld) : "pca");
         const stepCm = Math.max(0.1, config.roundH);
         const stitchWidthCm = learningState.stitchWidthByWeight[weightKey] || getDefaultStitchWidthCm(config);
 
         const cloud = getVertexCloud(targets);
         if (!cloud.vertices.length) {
             const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
-            const profiles = [{ rnd: 1, y: 0, circumferenceCm: stitchWidthCm * 6, startPole }];
-            return { rounds: fallback, profiles, stitchWidthCm, stepCm, startPole };
+            const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
+            return { rounds: fallback, profiles, stitchWidthCm, stepCm, signature, axisMode: axisWorld ? "custom" : "pca" };
         }
 
-        const heightWorld = Math.max(0.001, cloud.maxY - cloud.minY);
-        const stepWorld = Math.max(0.12, stepCm / CM_RATIO);
-        const sliceCount = Math.max(4, Math.min(260, Math.round(heightWorld / stepWorld) + 1));
+        let axisStart;
+        let axisEnd;
+        if (axisWorld) {
+            axisStart = axisWorld.start.clone();
+            axisEnd = axisWorld.end.clone();
+        } else {
+            const center = new THREE.Vector3(cloud.centerX, (cloud.minY + cloud.maxY) * 0.5, cloud.centerZ);
+            const principal = estimatePrincipalAxis(cloud.vertices);
+            let minProj = Infinity;
+            let maxProj = -Infinity;
+            cloud.vertices.forEach(v => {
+                const proj = v.clone().sub(center).dot(principal);
+                if (proj < minProj) minProj = proj;
+                if (proj > maxProj) maxProj = proj;
+            });
+            axisStart = center.clone().add(principal.clone().multiplyScalar(minProj));
+            axisEnd = center.clone().add(principal.clone().multiplyScalar(maxProj));
+        }
 
+        const axisVec = axisEnd.clone().sub(axisStart);
+        const axisLen = axisVec.length();
+        if (!Number.isFinite(axisLen) || axisLen < 1e-6) {
+            const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+            const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
+            return { rounds: fallback, profiles, stitchWidthCm, stepCm, signature, axisMode: axisWorld ? "custom" : "pca" };
+        }
+
+        const axisDir = axisVec.clone().normalize();
+        const stepWorld = Math.max(0.12, stepCm / CM_RATIO);
+        const sliceCount = Math.max(4, Math.min(260, Math.round(axisLen / stepWorld) + 1));
         const orderedSlices = [];
+
         for (let i = 0; i < sliceCount; i++) {
             const t = sliceCount <= 1 ? 0 : (i / (sliceCount - 1));
-            const y = startPole === 'top'
-                ? (cloud.maxY - (t * heightWorld))
-                : (cloud.minY + (t * heightWorld));
+            const pointOnAxis = axisStart.clone().lerp(axisEnd, t);
 
-            let perimeterWorld = getSlicePerimeterWorld(targets, y, 1e-5);
+            let perimeterWorld = getSlicePerimeterWorld(targets, pointOnAxis, axisDir, 1e-5);
             if (perimeterWorld <= 1e-6) {
                 const probe = Math.max(0.03, stepWorld * 0.18);
                 perimeterWorld = Math.max(
-                    getSlicePerimeterWorld(targets, y + probe, 1e-5),
-                    getSlicePerimeterWorld(targets, y - probe, 1e-5)
+                    getSlicePerimeterWorld(targets, pointOnAxis.clone().add(axisDir.clone().multiplyScalar(probe)), axisDir, 1e-5),
+                    getSlicePerimeterWorld(targets, pointOnAxis.clone().add(axisDir.clone().multiplyScalar(-probe)), axisDir, 1e-5)
                 );
             }
 
             const circumferenceCm = Math.max(0.05, perimeterWorld * CM_RATIO);
             const rawSts = Math.max(1, Math.round(circumferenceCm / Math.max(0.1, stitchWidthCm)));
             const snappedSts = Math.max(6, Math.round(rawSts / 6) * 6);
-            orderedSlices.push({ y, circumferenceCm, sts: snappedSts });
+            orderedSlices.push({
+                distanceCm: (axisLen * t) * CM_RATIO,
+                circumferenceCm,
+                sts: snappedSts
+            });
         }
 
         const smoothedSts = orderedSlices.map((slice, i) => {
@@ -536,7 +645,7 @@
         });
 
         const rounds = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
-        const profiles = [{ rnd: 1, y: orderedSlices[0].y, circumferenceCm: orderedSlices[0].circumferenceCm, startPole }];
+        const profiles = [{ rnd: 1, distanceCm: orderedSlices[0].distanceCm, circumferenceCm: orderedSlices[0].circumferenceCm }];
 
         let prevSts = 6;
         for (let i = 1; i < smoothedSts.length; i++) {
@@ -547,7 +656,7 @@
             else if (delta < 0) desc = `dec x${Math.abs(delta)}`;
 
             rounds.push({ rnd: rounds.length + 1, desc, sts: targetSts });
-            profiles.push({ rnd: rounds.length, y: orderedSlices[i].y, circumferenceCm: orderedSlices[i].circumferenceCm, startPole });
+            profiles.push({ rnd: rounds.length, distanceCm: orderedSlices[i].distanceCm, circumferenceCm: orderedSlices[i].circumferenceCm });
             prevSts = targetSts;
         }
 
@@ -564,7 +673,14 @@
             compact[stuffIdx].desc = `${compact[stuffIdx].desc} | stuff firmly`;
         }
 
-        return { rounds: compact, profiles, stitchWidthCm, stepCm, startPole, signature };
+        return {
+            rounds: compact,
+            profiles,
+            stitchWidthCm,
+            stepCm,
+            signature,
+            axisMode: axisWorld ? "custom" : "pca"
+        };
     }
 
 
@@ -619,8 +735,9 @@
 
     // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
     window.openPatternModal = () => { 
-        if (!selectedPatternStart || currentSelection.length !== 1 || selectedPatternStart.egg !== currentSelection[0]) {
-            return alert("시작점을 선택하시오.");
+        if (currentSelection.length !== 1) return alert("디자인을 하나 선택해주세요.");
+        if (!selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
+            return alert("왼쪽 AXIS 버튼을 눌러 시작점과 끝점을 먼저 선택해주세요.");
         }
         document.getElementById('pattern-modal').style.display='block'; 
         document.getElementById('modal-overlay').style.display='block'; 
@@ -634,17 +751,21 @@
         const weightKey = document.getElementById('yarn-weight-select').value;
         const pName = document.getElementById('pattern-name-input').value;
         const config = yarnWeights[weightKey];
-        if (!selectedPatternStart || currentSelection.length !== 1 || selectedPatternStart.egg !== currentSelection[0]) {
+        if (currentSelection.length !== 1 || !selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
             closeModal();
-            return alert("시작점을 선택하시오.");
+            return alert("왼쪽 AXIS 버튼을 눌러 시작점과 끝점을 먼저 선택해주세요.");
         }
-        const targets = [selectedPatternStart.egg];
-        const startPole = selectedPatternStart.pole;
-        closeModal();
 
-        const generated = buildRoundsFromSlices(targets, weightKey, config, startPole);
+        const axisWorld = getSliceAxisWorldPoints();
+        if (!axisWorld) {
+            closeModal();
+            return alert("축 정보가 유효하지 않습니다. AXIS를 다시 선택해주세요.");
+        }
+
+        const targets = [axisWorld.egg];
+        const generated = buildRoundsFromSlices(targets, weightKey, config, axisWorld);
         let rounds = generated.rounds;
-        const designSignature = buildDesignSignature(targets, weightKey, startPole);
+        const designSignature = generated.signature || buildDesignSignature(targets, weightKey, getAxisDescriptor(axisWorld));
         const learnedSample = getBestLearnedPattern(designSignature);
         if (learnedSample) {
             const learnedRows = normalizeEditedRows(learnedSample.corrected);
@@ -658,7 +779,7 @@
             stitchWidthCm: generated.stitchWidthCm,
             stepCm: generated.stepCm,
             signature: designSignature,
-            startPole
+            axisMode: generated.axisMode
         };
 
         // 결과 팝업창 생성 (editable + deep learn)
@@ -667,7 +788,7 @@
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
             <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
                 <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Start: ${getPatternStartLabel(startPole)} | Generated by v5.49.2</p>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.2</p>
                 <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
                     <tr style="background:#eee;">
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
@@ -813,20 +934,26 @@
             if(h.length>0) spawnEgg(h[0].point); return;
         }
 
+        if (isAxisPickMode && e.button===0) {
+            const axisHits = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
+            if (axisHits.length === 0) {
+                alert("축 포인트는 오브젝트 표면에서 선택해주세요.");
+                return;
+            }
+            const hit = axisHits[0];
+            updateSelectionVisuals([hit.object]);
+            setSliceAxisPoint(hit.object, hit.point.clone());
+            return;
+        }
+
         const ph = ray.intersectObjects(patternStartMarkers.filter(marker => marker.visible));
         if(ph.length>0) {
-            const marker = ph[0].object;
-            selectedPatternStart = { egg: marker.userData.egg, pole: marker.userData.pole };
-            updatePatternStartMarkerVisuals();
-            controls.enabled = true;
-            isDragging = false;
-            dragTarget = null;
             return;
         }
 
         const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
         if(gh.length>0) {
-            clearPatternStartSelection();
+            clearSliceAxisSelection();
             dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
             const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
             ray.ray.intersectPlane(pl, startIntersect);
@@ -850,7 +977,7 @@
 
         const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
         if(eh.length>0) {
-            clearPatternStartSelection();
+            clearSliceAxisSelection();
             dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
             if(e.button===0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
             else if(e.button===0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
@@ -858,7 +985,7 @@
             ray.ray.intersectPlane(pl, startIntersect);
             if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
         } else {
-            clearPatternStartSelection();
+            clearSliceAxisSelection();
             if(e.button===0){ updateSelectionVisuals([]); controls.enabled=true; }
             else if(e.button===2){
                 isBoxSelecting=true; boxStart.set(e.clientX, e.clientY);
@@ -946,10 +1073,10 @@
         currentSelection=sel; updateRealTimeSize();
         [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles, ...patternStartMarkers].forEach(h=>h.visible=false);
         groupGizmo.visible=false; document.getElementById('palette').style.display='none';
-        if(sel.length!==1 || !selectedPatternStart || selectedPatternStart.egg !== sel[0]) clearPatternStartSelection();
+        if(sel.length!==1 || !selectedSliceAxis || selectedSliceAxis.egg !== sel[0]) clearSliceAxisSelection();
         if(sel.length===0){ currentEgg=null; return; }
         document.getElementById('palette').style.display='grid';
-        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); updatePatternStartMarkers(); }
+        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); updateAxisPickMarkers(); }
         else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
     }
 
@@ -957,8 +1084,9 @@
         const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;};
         handles=[0,1,2,3,4,5].map(id=>mkH(id));
         const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;};
-        const mkPatternMarker=(pole)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.9,16,16),new THREE.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0.9,depthTest:false})); m.renderOrder=1000; m.visible=false; m.userData={isPatternStartMarker:true,pole,egg:null}; scene.add(m); return m;};
-        patternStartMarkers=[mkPatternMarker('top'), mkPatternMarker('bottom')];
+        const mkAxisMarker=(kind)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.1,16,16),new THREE.MeshBasicMaterial({color:getAxisMarkerColor(kind),depthTest:false})); m.renderOrder=1001; m.visible=false; m.userData={isAxisMarker:true,kind}; scene.add(m); return m;};
+        axisPickMarkers=[mkAxisMarker('start'), mkAxisMarker('end')];
+        patternStartMarkers=[];
         rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
     }
 
@@ -1009,6 +1137,7 @@
             handles.forEach((h,i)=>{ const lP=ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET)); h.position.copy(p).add(lP.applyQuaternion(q)); });
             [rotX_H, rotY_H, rotZ_H].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2);});
             updatePatternStartMarkers();
+            updateAxisPickMarkers();
         }
         renderer.render(scene, camera); controls.update();
     }
