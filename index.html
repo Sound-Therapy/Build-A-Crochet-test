@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet Engine v5.49.7</title>
+    <title>Build-A-Crochet Engine v5.49.8</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -87,7 +87,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.49.7</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.49.8</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -378,11 +378,15 @@
     function clearSliceAxisSelection() {
         selectedSliceAxis = null;
         axisPickStage = "start";
+        if (axisPreviewTarget) {
+            applyAxisPreview(axisPreviewTarget, false);
+            axisPreviewTarget = null;
+        }
         updateAxisPickMarkers();
     }
 
-    function deactivateAxisPickMode(clearAxis = false) {
-        if (axisPreviewTarget) {
+    function deactivateAxisPickMode(clearAxis = false, keepPreview = false) {
+        if (!keepPreview && axisPreviewTarget) {
             applyAxisPreview(axisPreviewTarget, false);
             axisPreviewTarget = null;
         }
@@ -404,6 +408,35 @@
             start: selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld),
             end: selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld)
         };
+    }
+
+    function getEggPoleWorldPoints(egg) {
+        if (!egg || !egg.geometry) return null;
+        egg.geometry.computeBoundingBox();
+        const box = egg.geometry.boundingBox;
+        if (!box) return null;
+        const centerX = (box.min.x + box.max.x) * 0.5;
+        const centerZ = (box.min.z + box.max.z) * 0.5;
+        return {
+            top: new THREE.Vector3(centerX, box.max.y, centerZ).applyMatrix4(egg.matrixWorld),
+            bottom: new THREE.Vector3(centerX, box.min.y, centerZ).applyMatrix4(egg.matrixWorld)
+        };
+    }
+
+    function pickAxisPointFromRay(raycaster, egg) {
+        const hits = raycaster.intersectObject(egg);
+        if (hits.length > 0) return hits[0].point.clone();
+
+        const poles = getEggPoleWorldPoints(egg);
+        if (!poles) return null;
+
+        const dTop = raycaster.ray.distanceSqToPoint(poles.top);
+        const dBottom = raycaster.ray.distanceSqToPoint(poles.bottom);
+        const snapThreshold = 9.0;
+        if (dTop <= snapThreshold || dBottom <= snapThreshold) {
+            return dTop <= dBottom ? poles.top.clone() : poles.bottom.clone();
+        }
+        return null;
     }
 
     function updateAxisPickMarkers() {
@@ -447,11 +480,11 @@
             const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
             const endW = endLocal.clone().applyMatrix4(egg.matrixWorld);
             if (startW.distanceTo(endW) < 0.3) {
-                alert("시작점과 끝점 거리가 너무 짧습니다. 다시 선택해주세요.");
+                alert("Start and end points are too close. Please choose again.");
                 return;
             }
             selectedSliceAxis.endLocal = endLocal;
-            deactivateAxisPickMode(false);
+            deactivateAxisPickMode(false, true);
         }
         updateAxisPickMarkers();
     }
@@ -459,7 +492,7 @@
     window.toggleAxisPickMode = () => {
         if (!isAxisPickMode) {
             if (currentSelection.length !== 1) {
-                return alert("먼저 물체를 하나 선택해주세요.");
+                return alert("Please select one object first.");
             }
             clearSliceAxisSelection();
             isAxisPickMode = true;
@@ -467,7 +500,7 @@
             axisPreviewTarget = currentSelection[0];
             applyAxisPreview(axisPreviewTarget, true);
             updateAxisModeButton();
-            alert("축 선택 모드\n- 우클릭: 시작점/끝점 선택\n- ESC: 축 선택 취소");
+            alert("Axis pick mode\n- Right click: pick start/end points\n- ESC: cancel axis picking");
             updateSelectionVisuals([axisPreviewTarget]);
             return;
         }
@@ -773,9 +806,9 @@
 
     // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
     window.openPatternModal = () => { 
-        if (currentSelection.length !== 1) return alert("Select your design");
+        if (currentSelection.length !== 1) return alert("Please select one design object.");
         if (!selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
-            return alert("Click Axis to select start and end points");
+            return alert("Use the AXIS button to pick start and end points first.");
         }
         document.getElementById('pattern-modal').style.display='block'; 
         document.getElementById('modal-overlay').style.display='block'; 
@@ -791,13 +824,13 @@
         const config = yarnWeights[weightKey];
         if (currentSelection.length !== 1 || !selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
             closeModal();
-            return alert("Click Axis to select start and end points");
+            return alert("Use the AXIS button to pick start and end points first.");
         }
 
         const axisWorld = getSliceAxisWorldPoints();
         if (!axisWorld) {
             closeModal();
-            return alert("Please select axis points again");
+            return alert("Axis data is invalid. Please pick AXIS again.");
         }
 
         const targets = [axisWorld.egg];
@@ -820,13 +853,13 @@
             axisMode: generated.axisMode
         };
 
-        // 결과 팝업창 생성 (editable + deep learn)
+        // Build result popup (editable + deep learn)
         const win = window.open("", "_blank", "width=450,height=700");
         let html = `
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
             <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
                 <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.7</p>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.8</p>
                 <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
                     <tr style="background:#eee;">
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
@@ -932,7 +965,8 @@
         const points = [];
         for (let i = 0; i <= 20; i++) {
             const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
-            points.push(new THREE.Vector2(Math.max(0.1, r), y));
+            const poleRadius = (i === 0 || i === 20) ? 0 : Math.max(0.08, r);
+            points.push(new THREE.Vector2(poleRadius, y));
         }
         const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
         geo.userData.origPos = geo.attributes.position.clone();
@@ -952,7 +986,7 @@
             const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
             let tw = 0; const sOff = new THREE.Vector3();
             for (let j = 0; j < 6; j++) {
-                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // 아버님이 강조하신 3.5제곱
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // Legacy 3.5 exponent weighting
                 tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
             }
             pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
@@ -981,15 +1015,15 @@
                 ? currentSelection[0]
                 : null;
             if (!targetEgg) {
-                alert("Selet an object first");
+                alert("Axis picking requires exactly one selected object.");
                 return;
             }
-            const axisHits = ray.intersectObject(targetEgg);
-            if (axisHits.length === 0) {
-                alert("Right click points");
+            const pickedPoint = pickAxisPointFromRay(ray, targetEgg);
+            if (!pickedPoint) {
+                alert("Right-click the object surface (tips are auto-snapped).");
                 return;
             }
-            setSliceAxisPoint(targetEgg, axisHits[0].point.clone());
+            setSliceAxisPoint(targetEgg, pickedPoint);
             return;
         }
 
@@ -1004,7 +1038,7 @@
                 if(dragTarget.userData.isHandle){
                     const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1;
                     const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
-                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // 앵커 포인트 고정 로직
+                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // Anchor point lock logic
                     startHandleDist=startIntersect.distanceTo(worldAnchorPos);
                     dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
                 } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
@@ -1191,7 +1225,7 @@
         history.push(str); redoStack=[]; if(history.length>40) history.shift(); updateNavButtons();
     }
     function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{scene.remove(e);}); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e) {} }
-    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.7_${Date.now()}.json`; a.click();};
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.8_${Date.now()}.json`; a.click();};
     window.triggerFileSelect=()=>document.getElementById('file-input').click();
     window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
 
@@ -1207,7 +1241,7 @@
         renderer.render(scene, camera); controls.update();
     }
     window.onload = init;
-    // P2D 팝업창을 여는 함수
+    // Open P2D modal
 function openP2DModal() {
     document.getElementById('p2d-modal').style.display = 'block';
     document.getElementById('p2d-overlay').style.display = 'block';
@@ -1244,7 +1278,7 @@ function generateP2DDesign() {
     // Force the engine to recognize the new object by clicking it programmatically
 if(currentEgg) { 
     const event = { object: currentEgg };
-    // 만약 아버님 코드에 알을 선택했을 때 실행되는 함수(예: onSelect)가 있다면 여기서 호출하세요.
+    // Call your object-select hook here if needed.
 }
 }
 
@@ -1278,24 +1312,24 @@ function createNewCrochetMesh(rounds, yarnMm) {
     const points = [];
     const heightStep = (yarnMm / 10) * 1.5;
 
-    // 1. 포인트 생성 (엔진 규격에 맞게)
-    points.push(new THREE.Vector2(0.001, 0));
+    // 1. Build profile points (engine format)
+    points.push(new THREE.Vector2(0, 0));
     rounds.forEach((rd, index) => {
         const radius = (rd.stitches * yarnMm) / Math.PI / 2 / 10; 
         const yPos = (index + 1) * heightStep;
         points.push(new THREE.Vector2(radius, yPos));
     });
-    points.push(new THREE.Vector2(0.001, (rounds.length + 1) * heightStep));
+    points.push(new THREE.Vector2(0, (rounds.length + 1) * heightStep));
 
-    // 2. 지오메트리 생성 및 중심점 보정 (핵심!)
+    // 2. Build geometry and center correction
     const geometry = new THREE.LatheGeometry(points, 32);
     
-    // 엔진의 createEgg처럼 중심을 맞추기 위해 전체 높이의 절반만큼 내립니다.
+    // Match createEgg centering by shifting half-height.
     const totalH = (rounds.length + 1) * heightStep;
     geometry.translate(0, -totalH / 2, 0); 
     geometry.userData.origPos = geometry.attributes.position.clone();
 
-    // 3. 메쉬 및 재질 설정
+    // 3. Mesh and material
     const material = new THREE.MeshStandardMaterial({ 
         color: 0x6f42c1, 
         side: THREE.DoubleSide,
@@ -1304,31 +1338,31 @@ function createNewCrochetMesh(rounds, yarnMm) {
     });
     const newMesh = new THREE.Mesh(geometry, material);
     
-    // 4. 엔진 표준 데이터 구조 (오프셋 6개 고정)
+    // 4. Engine-standard data structure (6 offsets)
     newMesh.userData.isEgg = true;
     newMesh.userData.data = {
         scale: new THREE.Vector3(1, 1, 1),
-        // 엔진은 핸들이 6개이므로 오프셋도 6개여야 합니다.
+        // Engine has 6 handles, so keep 6 offsets.
         offsets: [0,1,2,3,4,5].map(() => new THREE.Vector3(0, 0, 0))
     };
 
     scene.add(newMesh);
 
-    // 5. 전역 변수 업데이트 및 즉시 갱신
+    // 5. Update global references and refresh
     currentEgg = newMesh;
     currentSelection = [newMesh];
 
     if (typeof captureState === "function") captureState();
     
-    // UI 치수 업데이트 함수 (코드 327번줄 참고)
+    // Update UI dimensions
     updateRealTimeSize(); 
     
-    // 핸들 위치 재계산 및 표시
+    // Recompute and show handles
     if (typeof createHandles === "function") {
         updateSelectionVisuals([newMesh]); 
     }
 
-    console.log("P2D Object successfully integrated into v5.49.7");
+    console.log("P2D Object successfully integrated into v5.49.8");
 }
 /**
  * NEW: The missing Modal Close function
@@ -1337,15 +1371,15 @@ function closeP2DModal() {
     document.getElementById('p2d-modal').style.display = 'none';
     document.getElementById('p2d-overlay').style.display = 'none';
 }
-    // --- [ Build-A-Crochet Engine v5.49.7 Deep Learning Logic ] ---
+    // --- [ Build-A-Crochet Engine v5.49.8 Deep Learning Logic ] ---
 
 window.openDeepLearningModal = () => {
-    if (currentSelection.length === 0) return alert("학습시킬 디자인을 먼저 선택해주세요.");
+    if (currentSelection.length === 0) return alert("Select a design to train first.");
     
     const weightKey = document.getElementById('yarn-weight-select').value;
     const config = yarnWeights[weightKey];
     
-    // 현재 디자인에서 패턴 데이터를 추출합니다.
+    // Extract pattern data from the current design.
     const rounds = getPatternDataForLearning(currentSelection, config);
 
     const learnWin = window.open("", "_blank", "width=500,height=800");
@@ -1355,7 +1389,7 @@ window.openDeepLearningModal = () => {
         <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
             <h2 style="color:#dc3545; margin-top:0;">🧠 Deep Learning Editor</h2>
             <p style="font-size:12px; color:#666; line-height:1.5;">
-                수치를 직접 수정하신 후 하단의 <b>DEEP LEARN</b>을 누르세요.
+                Edit values directly, then click <b>DEEP LEARN</b> below.
             </p>
             <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
                 <tr style="background:#eee;">
@@ -1375,7 +1409,7 @@ window.openDeepLearningModal = () => {
             </table>
             <button onclick="window.opener.finalizeLearning(); window.close();" 
                 style="width:100%; height:50px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:16px;">
-                🚀 DEEP LEARN (학습 시작)
+                🚀 DEEP LEARN (Start Learning)
             </button>
         </div>
     </body>`;
@@ -1383,11 +1417,11 @@ window.openDeepLearningModal = () => {
     learnWin.document.write(html);
 };
 
-// 패턴 추출 보조 함수
+// Pattern extraction helper
 function getPatternDataForLearning(targets, config) {
     const rounds = [];
-    const step = config.roundH / 0.5; // CM_RATIO 반영
-    // 실제 레이캐스팅 로직을 단순화하여 샘플 생성 (추후 아버님 엔진 로직과 완전 통합)
+    const step = config.roundH / 0.5; // Reflect CM_RATIO
+    // Simplified sample generator (replace with full raycast integration later).
     for(let r=1; r<=20; r++) {
         rounds.push({rnd: r, desc: r===1?"Magic Ring":"sc around", sts: 6+(r*2)});
     }
@@ -1401,7 +1435,7 @@ window.finalizeLearning = async (payload = {}) => {
         .filter(r => Number.isFinite(r.sts) && r.sts > 0 && String(r.desc || "").trim().length > 0)
         .map((r, i) => ({ rnd: i + 1, desc: String(r.desc || "").trim(), sts: Math.round(r.sts) }));
     if (!lastGenerationContext || !editedRounds.length) {
-        const message = "학습할 데이터가 부족합니다. 패턴 생성 후 다시 시도해주세요.";
+        const message = "Not enough training data. Generate a pattern first, then try again.";
         if (notifyProgress) notifyProgress(100, message);
         return { ok: false, message };
     }
