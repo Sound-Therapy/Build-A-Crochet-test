@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Build-A-Crochet Engine v5.49.2</title>
+    <title>Build-A-Crochet Engine v5.49.7</title>
     <style>
         body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
         #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
@@ -87,7 +87,7 @@
 </div>
 
 <div id="canvas-container">
-    <div id="v-tag">Build-A-Crochet Engine v5.49.6</div>
+    <div id="v-tag">Build-A-Crochet Engine v5.49.7</div>
     <div id="palette">
         <script>
             const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
@@ -106,12 +106,11 @@
     let isPlacementMode = false, dragTarget = null, isDragging = false;
     let rotX_H, rotY_H, rotZ_H, handles = [];
     let groupGizmo, groupHandles = [], groupRotHandles = [];
-    let patternStartMarkers = [];
-    let selectedPatternStart = null;
     let axisPickMarkers = [];
     let selectedSliceAxis = null;
     let isAxisPickMode = false;
     let axisPickStage = "start";
+    let axisPreviewTarget = null;
     let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
     let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
     let isBoxSelecting = false, boxStart = new THREE.Vector2();
@@ -339,9 +338,41 @@
         };
     }
 
-    function clearPatternStartSelection() {
-        selectedPatternStart = null;
-        updatePatternStartMarkerVisuals();
+    function applyAxisPreview(egg, enabled) {
+        if (!egg || !egg.material) return;
+        const mats = Array.isArray(egg.material) ? egg.material : [egg.material];
+        mats.forEach(mat => {
+            if (!mat) return;
+            if (enabled) {
+                if (!mat.userData.axisPreviewBackup) {
+                    mat.userData.axisPreviewBackup = {
+                        wireframe: !!mat.wireframe,
+                        transparent: !!mat.transparent,
+                        opacity: Number.isFinite(mat.opacity) ? mat.opacity : 1,
+                        depthWrite: mat.depthWrite !== false
+                    };
+                }
+                mat.wireframe = true;
+                mat.transparent = true;
+                mat.opacity = 0.22;
+                mat.depthWrite = false;
+                mat.needsUpdate = true;
+            } else if (mat.userData.axisPreviewBackup) {
+                const b = mat.userData.axisPreviewBackup;
+                mat.wireframe = !!b.wireframe;
+                mat.transparent = !!b.transparent;
+                mat.opacity = b.opacity;
+                mat.depthWrite = b.depthWrite;
+                mat.needsUpdate = true;
+                delete mat.userData.axisPreviewBackup;
+            }
+        });
+    }
+
+    function updateAxisModeButton() {
+        const btn = document.getElementById('axis-pick-btn');
+        if (!btn) return;
+        btn.classList.toggle('active', isAxisPickMode);
     }
 
     function clearSliceAxisSelection() {
@@ -350,16 +381,19 @@
         updateAxisPickMarkers();
     }
 
+    function deactivateAxisPickMode(clearAxis = false) {
+        if (axisPreviewTarget) {
+            applyAxisPreview(axisPreviewTarget, false);
+            axisPreviewTarget = null;
+        }
+        isAxisPickMode = false;
+        axisPickStage = "start";
+        updateAxisModeButton();
+        if (clearAxis) clearSliceAxisSelection();
+    }
+
     function getAxisMarkerColor(kind) {
         return kind === "start" ? 0x00d1ff : 0xffa94d;
-    }
-
-    function updatePatternStartMarkerVisuals() {
-        patternStartMarkers.forEach(marker => marker.visible = false);
-    }
-
-    function updatePatternStartMarkers() {
-        patternStartMarkers.forEach(marker => marker.visible = false);
     }
 
     function getSliceAxisWorldPoints() {
@@ -377,13 +411,13 @@
         if (!selectedSliceAxis || !selectedSliceAxis.egg) return;
 
         const egg = selectedSliceAxis.egg;
-        if (selectedSliceAxis.startLocal) {
+        if (selectedSliceAxis.startLocal && axisPickMarkers[0]) {
             const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
             axisPickMarkers[0].visible = true;
             axisPickMarkers[0].position.copy(startW);
             axisPickMarkers[0].material.color.set(getAxisMarkerColor("start"));
         }
-        if (selectedSliceAxis.endLocal) {
+        if (selectedSliceAxis.endLocal && axisPickMarkers[1]) {
             const endW = selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld);
             axisPickMarkers[1].visible = true;
             axisPickMarkers[1].position.copy(endW);
@@ -417,26 +451,30 @@
                 return;
             }
             selectedSliceAxis.endLocal = endLocal;
-            axisPickStage = "start";
-            isAxisPickMode = false;
-            document.getElementById('axis-pick-btn').classList.remove('active');
+            deactivateAxisPickMode(false);
         }
         updateAxisPickMarkers();
     }
 
     window.toggleAxisPickMode = () => {
         if (!isAxisPickMode) {
+            if (currentSelection.length !== 1) {
+                return alert("먼저 물체를 하나 선택해주세요.");
+            }
             clearSliceAxisSelection();
-            axisPickStage = "start";
             isAxisPickMode = true;
-            document.getElementById('axis-pick-btn').classList.add('active');
-            alert("축 선택 모드: 오브젝트에서 시작점을 클릭한 뒤 끝점을 클릭하세요.");
+            axisPickStage = "start";
+            axisPreviewTarget = currentSelection[0];
+            applyAxisPreview(axisPreviewTarget, true);
+            updateAxisModeButton();
+            alert("축 선택 모드\n- 우클릭: 시작점/끝점 선택\n- ESC: 축 선택 취소");
+            updateSelectionVisuals([axisPreviewTarget]);
             return;
         }
-        isAxisPickMode = false;
-        axisPickStage = "start";
-        document.getElementById('axis-pick-btn').classList.remove('active');
+        deactivateAxisPickMode(true);
+        updateSelectionVisuals(currentSelection.length ? [currentSelection[0]] : []);
     };
+
 
 
     function interpolatePointByDistance(p1, p2, d1, d2) {
@@ -735,9 +773,9 @@
 
     // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
     window.openPatternModal = () => { 
-        if (currentSelection.length !== 1) return alert("디자인을 하나 선택해주세요.");
+        if (currentSelection.length !== 1) return alert("Select your design");
         if (!selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
-            return alert("왼쪽 AXIS 버튼을 눌러 시작점과 끝점을 먼저 선택해주세요.");
+            return alert("Click Axis to select start and end points");
         }
         document.getElementById('pattern-modal').style.display='block'; 
         document.getElementById('modal-overlay').style.display='block'; 
@@ -753,13 +791,13 @@
         const config = yarnWeights[weightKey];
         if (currentSelection.length !== 1 || !selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
             closeModal();
-            return alert("왼쪽 AXIS 버튼을 눌러 시작점과 끝점을 먼저 선택해주세요.");
+            return alert("Click Axis to select start and end points");
         }
 
         const axisWorld = getSliceAxisWorldPoints();
         if (!axisWorld) {
             closeModal();
-            return alert("축 정보가 유효하지 않습니다. AXIS를 다시 선택해주세요.");
+            return alert("Please select axis points again");
         }
 
         const targets = [axisWorld.egg];
@@ -788,7 +826,7 @@
         <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
             <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
                 <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
-                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.2</p>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.7</p>
                 <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
                     <tr style="background:#eee;">
                         <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
@@ -934,20 +972,24 @@
             if(h.length>0) spawnEgg(h[0].point); return;
         }
 
-        if (isAxisPickMode && e.button===0) {
-            const axisHits = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
-            if (axisHits.length === 0) {
-                alert("축 포인트는 오브젝트 표면에서 선택해주세요.");
+        if (isAxisPickMode) {
+            if (e.button !== 2) {
+                controls.enabled = true;
                 return;
             }
-            const hit = axisHits[0];
-            updateSelectionVisuals([hit.object]);
-            setSliceAxisPoint(hit.object, hit.point.clone());
-            return;
-        }
-
-        const ph = ray.intersectObjects(patternStartMarkers.filter(marker => marker.visible));
-        if(ph.length>0) {
+            const targetEgg = (currentSelection.length === 1 && currentSelection[0] && currentSelection[0].userData.isEgg)
+                ? currentSelection[0]
+                : null;
+            if (!targetEgg) {
+                alert("Selet an object first");
+                return;
+            }
+            const axisHits = ray.intersectObject(targetEgg);
+            if (axisHits.length === 0) {
+                alert("Right click points");
+                return;
+            }
+            setSliceAxisPoint(targetEgg, axisHits[0].point.clone());
             return;
         }
 
@@ -1071,10 +1113,22 @@
 
     function updateSelectionVisuals(sel) {
         currentSelection=sel; updateRealTimeSize();
-        [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles, ...patternStartMarkers].forEach(h=>h.visible=false);
+        [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false);
         groupGizmo.visible=false; document.getElementById('palette').style.display='none';
-        if(sel.length!==1 || !selectedSliceAxis || selectedSliceAxis.egg !== sel[0]) clearSliceAxisSelection();
+
+        if (sel.length !== 1 || (selectedSliceAxis && selectedSliceAxis.egg !== sel[0])) {
+            clearSliceAxisSelection();
+            if (isAxisPickMode) deactivateAxisPickMode(true);
+        }
+
         if(sel.length===0){ currentEgg=null; return; }
+
+        if (isAxisPickMode) {
+            currentEgg = sel[0];
+            updateAxisPickMarkers();
+            return;
+        }
+
         document.getElementById('palette').style.display='grid';
         if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); updateAxisPickMarkers(); }
         else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
@@ -1086,7 +1140,6 @@
         const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;};
         const mkAxisMarker=(kind)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.1,16,16),new THREE.MeshBasicMaterial({color:getAxisMarkerColor(kind),depthTest:false})); m.renderOrder=1001; m.visible=false; m.userData={isAxisMarker:true,kind}; scene.add(m); return m;};
         axisPickMarkers=[mkAxisMarker('start'), mkAxisMarker('end')];
-        patternStartMarkers=[];
         rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
     }
 
@@ -1117,7 +1170,20 @@
     window.executeUndo=()=>{if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]);};
     window.executeRedo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
     function updateNavButtons(){ document.getElementById('undo-btn').disabled=(history.length<2); document.getElementById('redo-btn').disabled=(redoStack.length===0); }
-    function onKeyDown(e) { if(e.key === "Delete" || e.key === "Backspace") { if(currentSelection.length > 0) { currentSelection.forEach(obj => { scene.remove(obj); }); updateSelectionVisuals([]); captureState(); } } }
+    function onKeyDown(e) {
+        if (e.key === "Escape" && isAxisPickMode) {
+            deactivateAxisPickMode(true);
+            updateSelectionVisuals(currentSelection.length ? [currentSelection[0]] : []);
+            return;
+        }
+        if(e.key === "Delete" || e.key === "Backspace") {
+            if(currentSelection.length > 0) {
+                currentSelection.forEach(obj => { scene.remove(obj); });
+                updateSelectionVisuals([]);
+                captureState();
+            }
+        }
+    }
 
     function captureState() {
         const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:{x:e.position.x,y:e.position.y,z:e.position.z},rot:{x:e.quaternion.x,y:e.quaternion.y,z:e.quaternion.z,w:e.quaternion.w},scale:{x:e.userData.data.scale.x,y:e.userData.data.scale.y,z:e.userData.data.scale.z},offsets:e.userData.data.offsets.map(o=>({x:o.x,y:o.y,z:o.z})),col:e.material.color.getHex()}));
@@ -1125,7 +1191,7 @@
         history.push(str); redoStack=[]; if(history.length>40) history.shift(); updateNavButtons();
     }
     function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{scene.remove(e);}); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e) {} }
-    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.48_${Date.now()}.json`; a.click();};
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.7_${Date.now()}.json`; a.click();};
     window.triggerFileSelect=()=>document.getElementById('file-input').click();
     window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
 
@@ -1136,7 +1202,6 @@
             const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
             handles.forEach((h,i)=>{ const lP=ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET)); h.position.copy(p).add(lP.applyQuaternion(q)); });
             [rotX_H, rotY_H, rotZ_H].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2);});
-            updatePatternStartMarkers();
             updateAxisPickMarkers();
         }
         renderer.render(scene, camera); controls.update();
@@ -1263,7 +1328,7 @@ function createNewCrochetMesh(rounds, yarnMm) {
         updateSelectionVisuals([newMesh]); 
     }
 
-    console.log("P2D Object successfully integrated into v5.49.2");
+    console.log("P2D Object successfully integrated into v5.49.7");
 }
 /**
  * NEW: The missing Modal Close function
@@ -1272,7 +1337,7 @@ function closeP2DModal() {
     document.getElementById('p2d-modal').style.display = 'none';
     document.getElementById('p2d-overlay').style.display = 'none';
 }
-    // --- [ Build-A-Crochet Engine v5.49.2 Deep Learning Logic ] ---
+    // --- [ Build-A-Crochet Engine v5.49.7 Deep Learning Logic ] ---
 
 window.openDeepLearningModal = () => {
     if (currentSelection.length === 0) return alert("학습시킬 디자인을 먼저 선택해주세요.");
