@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Build-A-Crochet Engine v5.49.14</title>
+    <style>
+        body { margin: 0; background-color: #ffffff; color: #111; overflow: hidden; display: flex; font-family: monospace; touch-action: none; user-select: none; }
+        #panel { width: 100px; height: 100vh; background: #e0e0e0; border-right: 1px solid #ccc; display: flex; flex-direction: column; align-items: center; padding-top: 15px; z-index: 100; box-sizing: border-box; justify-content: space-between; padding-bottom: 15px;}
+        .top-btns { display: flex; flex-direction: column; align-items: center; width: 100%; gap: 10px; }
+        .nav-row { display: flex; gap: 4px; width: 85%; justify-content: center; }
+        .util-btn { flex: 1; height: 32px; cursor: pointer; background: #fdfdfd; border: 1px solid #bbb; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; }
+        .util-btn:hover { background: #fff; border-color: #888; }
+        .util-btn:disabled { opacity: 0.3; cursor: default; }
+        .save-btn { background: #444; color: white; border: none; font-size: 10px; }
+        .load-btn { background: #888; color: white; border: none; font-size: 10px; }
+        .egg-btn { background: #ff69b4; border-radius: 50%; width: 45px; height: 55px; cursor: pointer; border: 2px solid #fff; }
+        .egg-btn.active { background: #28a745; box-shadow: 0 0 15px rgba(40,167,69,0.5); }
+        #size-info { width: 90%; padding: 10px 5px; background: #f8f8f8; border: 1px solid #bbb; border-radius: 5px; font-size: 11px; color: #333; box-sizing: border-box;}
+        .info-label { font-weight: bold; color: #ff69b4; margin-bottom: 5px; border-bottom: 1px solid #ddd; padding-bottom: 2px; text-align: center; }
+        .val-row { display: flex; justify-content: space-between; margin-bottom: 4px; padding: 0 3px; }
+        .pattern-btn { width: 85px; background: #007bff; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
+        .axis-btn { width: 85px; background: #495057; color: white; height: 32px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px;}
+        .axis-btn.active { background: #20c997; }
+        .p2d-btn { width: 85px; background: #6f42c1; color: white; height: 35px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 10px; margin-top:5px;}
+        .learn-btn { width: 85px; background: #dc3545; color: white; height: 35px; border: 2px solid #fff; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 9px; margin-top:5px;}
+
+        #canvas-container { flex-grow: 1; position: relative; }
+        #v-tag { position: absolute; bottom: 15px; right: 20px; color: #444; font-size: 12px; font-weight: bold; pointer-events: none; }
+        #palette { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px; display: none; grid-template-columns: repeat(6, 1fr); gap: 6px; border: 1px solid #ccc; z-index: 200; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .color-dot { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0,0,0,0.15); }
+        #select-box { border: 2px dashed #ff69b4; background-color: rgba(255, 105, 180, 0.2); position: absolute; pointer-events: none; display: none; z-index: 300; }
+        
+        #pattern-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 300px; background: white; border: 1px solid #ccc; border-radius: 12px; padding: 20px; z-index: 1000; box-shadow: 0 4px 20px rgba(0,0,0,0.2); font-family: monospace; }
+        #modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999; }
+    </style>
+</head>
+<body>
+
+<div id="modal-overlay" onclick="closeModal()"></div>
+<div id="pattern-modal">
+    <div style="font-weight:bold; text-align:center; margin-bottom:15px; color:#007bff;">AI Pattern Generator</div>
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Project Name</div>
+    <input type="text" id="pattern-name-input" style="width:100%; padding:8px; margin-bottom:15px; box-sizing:border-box;" value="My Crochet Project">
+    <div style="font-size:11px; color:#666; margin-bottom:5px;">Yarn Weight (0-7)</div>
+    <select id="yarn-weight-select" style="width:100%; padding:8px; margin-bottom:20px; box-sizing:border-box; font-family:monospace;">
+        <option value="micro_0">0 Lace/Micro (1.25-1.5mm)</option>
+        <option value="fine_1">1 Super Fine (2.25-3.25mm)</option>
+        <option value="fine_2">2 Fine (3.25-3.5mm)</option>
+        <option value="light_3">3 Light (3.75-4.5mm)</option>
+        <option value="medium_4" selected>4 Medium (4.5-5.5mm)</option>
+        <option value="bulky_5">5 Bulky (5.5-8mm)</option>
+        <option value="super_6">6 Super Bulky (8-12mm)</option>
+        <option value="jumbo_7">7 Jumbo (12.75mm+)</option>
+        
+    </select>
+    <div style="display:flex; justify-content:space-between;">
+        <button onclick="closeModal()" style="width:48%; padding:10px; cursor:pointer;">Cancel</button>
+        <button onclick="startAIAnalysis()" style="width:48%; padding:10px; background:#007bff; color:white; border:none; font-weight:bold; cursor:pointer;">Generate</button>
+    </div>
+</div>
+
+<div id="panel">
+    <div class="top-btns">
+        <div class="nav-row">
+            <button id="undo-btn" class="util-btn" onclick="executeUndo()">⟲</button>
+            <button id="redo-btn" class="util-btn" onclick="executeRedo()">⟳</button>
+        </div>
+        <div class="nav-row">
+            <button class="util-btn save-btn" onclick="saveProject()">SAVE</button>
+            <button class="util-btn load-btn" onclick="triggerFileSelect()">LOAD</button>
+        </div>
+        <input type="file" id="file-input" style="display:none;" accept=".json" onchange="handleFileSelect(event)">
+        <div id="egg-spawn-btn" class="egg-btn" onclick="togglePlacementMode()"></div>
+        <div id="size-info">
+            <div class="info-label">SIZE (cm)</div>
+            <div class="val-row"><span>W:</span><span id="info-w">0.0</span></div>
+            <div class="val-row"><span>H:</span><span id="info-h">0.0</span></div>
+            <div class="val-row"><span>D:</span><span id="info-d">0.0</span></div>
+        </div>
+    </div>
+    
+    <div style="width:100%; display:flex; flex-direction:column; align-items:center; gap:5px;">
+        <button class="pattern-btn" onclick="openPatternModal()">PATTERN</button>
+        <button id="axis-pick-btn" class="axis-btn" onclick="toggleAxisPickMode()">AXIS</button>
+       <button class="p2d-btn" onclick="openP2DModal()">P2D</button>
+    </div>
+</div>
+
+<div id="canvas-container">
+    <div id="v-tag">Build-A-Crochet Engine v5.49.14</div>
+    <div id="palette">
+        <script>
+            const colors = ['#ffffff','#f0f0f0','#d0d0d0','#808080','#404040','#000000', '#ff0000','#dc3545','#ff6b6b','#ff8787','#ff69b4','#fcc2d7', '#fd7e14','#f76707','#ff922b','#ffd43b','#fff3bf','#fab005', '#28a745','#40c057','#8ce99a','#12b886','#087f5b','#b2f2bb', '#007bff','#228be6','#74c0fc','#15aabf','#4dabf7','#a5d8ff', '#6f42c1','#7950f2','#be4bdb','#eebefa','#85501d','#d7b49e'];
+            colors.forEach(c => document.write(`<div class="color-dot" style="background:${c};" onclick="updateColor('${c}')"></div>`));
+        </script>
+    </div>
+    <div id="select-box"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+    // --- [ Core Global Variables ] ---
+    let scene, camera, renderer, controls, currentEgg, ghostEgg;
+    let isPlacementMode = false, dragTarget = null, isDragging = false;
+    let rotX_H, rotY_H, rotZ_H, handles = [];
+    let groupGizmo, groupHandles = [], groupRotHandles = [];
+    let axisPickMarkers = [];
+    let selectedSliceAxis = null;
+    let isAxisPickMode = false;
+    let axisPickStage = "start";
+    let axisPreviewTarget = null;
+    let axisSelectionLocked = false;
+    let startScale, startPos, startRotation, mouseButton, startGroupData = [], lastMouseAngle = 0;
+    let worldAnchorPos = new THREE.Vector3(), startIntersect = new THREE.Vector3(), startHandleDist = 1;
+    let isBoxSelecting = false, boxStart = new THREE.Vector2();
+    let selectBoxEl = document.getElementById('select-box');
+    let history = [], redoStack = [], currentSelection = [];
+    
+    // --- [ Extended Yarn Data (8 Steps) ] ---
+    const yarnWeights = {
+        micro_0: {roundH: 0.15, label: "0 Lace/Micro"},
+        fine_1: {roundH: 0.22, label: "1 Super Fine"},
+        fine_2: {roundH: 0.28, label: "2 Fine"},
+        light_3: {roundH: 0.32, label: "3 Light"},
+        medium_4: {roundH: 0.38, label: "4 Medium"},
+        bulky_5: {roundH: 0.52, label: "5 Bulky"},
+        super_6: {roundH: 0.75, label: "6 Super Bulky"},
+        jumbo_7: {roundH: 1.10, label: "7 Jumbo"}
+    };
+    const yarnWeightOrder = ["micro_0", "fine_1", "fine_2", "light_3", "medium_4", "bulky_5", "super_6", "jumbo_7"];
+    const colorNames = {'#ffffff':'White','#000000':'Black','#ff0000':'Red','#ff69b4':'Pink','#28a745':'Green','#007bff':'Blue','#ffd43b':'Yellow'};
+    const CM_RATIO = 0.5, BASE_H = 20, BASE_R = 7, H_OFFSET = 7;
+    const LEARN_DB_KEY = "bac_learning_v2";
+    let lastGenerationContext = null;
+    const learningState = {
+        stitchWidthByWeight: {},
+        roundHeightScaleByWeight: {},
+        instructionModelByWeight: {},
+        samples: []
+    };
+
+    function getDefaultStitchWidthCm(config) {
+        return Math.max(0.15, config.roundH * 1.6);
+    }
+
+    function getWeightDistance(a, b) {
+        const ia = yarnWeightOrder.indexOf(a);
+        const ib = yarnWeightOrder.indexOf(b);
+        if (ia < 0 || ib < 0) return 7;
+        return Math.abs(ia - ib);
+    }
+
+    function loadLearningState() {
+        try {
+            const raw = localStorage.getItem(LEARN_DB_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === "object") {
+                learningState.stitchWidthByWeight = parsed.stitchWidthByWeight || {};
+                learningState.roundHeightScaleByWeight = parsed.roundHeightScaleByWeight || {};
+                learningState.instructionModelByWeight = parsed.instructionModelByWeight || {};
+                learningState.samples = Array.isArray(parsed.samples) ? parsed.samples : [];
+            }
+        } catch (e) {}
+    }
+
+    function saveLearningState() {
+        const payload = {
+            stitchWidthByWeight: learningState.stitchWidthByWeight,
+            roundHeightScaleByWeight: learningState.roundHeightScaleByWeight,
+            instructionModelByWeight: learningState.instructionModelByWeight,
+            samples: learningState.samples.slice(-80)
+        };
+        localStorage.setItem(LEARN_DB_KEY, JSON.stringify(payload));
+    }
+
+    function classifyInstruction(desc = "") {
+        const t = String(desc || "").toLowerCase();
+        if (t.includes("magic")) return "magic";
+        if (t.includes("color")) return "color";
+        if (t.includes("dec")) return "dec";
+        if (t.includes("inc")) return "inc";
+        return "sc";
+    }
+
+    function buildDesignSignature(targets, weightKey, axisKey = null) {
+        const box = new THREE.Box3();
+        targets.forEach(obj => {
+            obj.geometry.computeBoundingBox();
+            box.union(obj.geometry.boundingBox.clone().applyMatrix4(obj.matrixWorld));
+        });
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        return {
+            weightKey,
+            axisKey,
+            count: targets.length,
+            w: Number((size.x * CM_RATIO).toFixed(2)),
+            h: Number((size.y * CM_RATIO).toFixed(2)),
+            d: Number((size.z * CM_RATIO).toFixed(2)),
+            cx: Number((center.x * CM_RATIO).toFixed(2)),
+            cy: Number((center.y * CM_RATIO).toFixed(2)),
+            cz: Number((center.z * CM_RATIO).toFixed(2))
+        };
+    }
+
+    function signatureDistance(a, b) {
+        if (!a || !b) return Infinity;
+        if (a.weightKey !== b.weightKey) return Infinity;
+        if ((a.axisKey || null) !== (b.axisKey || null)) return Infinity;
+        const dc = Math.abs((a.count || 0) - (b.count || 0)) * 2.0;
+        const ds = Math.abs((a.w || 0) - (b.w || 0)) + Math.abs((a.h || 0) - (b.h || 0)) + Math.abs((a.d || 0) - (b.d || 0));
+        const dp = (Math.abs((a.cx || 0) - (b.cx || 0)) + Math.abs((a.cy || 0) - (b.cy || 0)) + Math.abs((a.cz || 0) - (b.cz || 0))) * 0.25;
+        return dc + ds + dp;
+    }
+
+    function getBestLearnedPattern(signature) {
+        let best = null;
+        let bestDist = Infinity;
+        learningState.samples.forEach(s => {
+            if (!s || !s.signature || !Array.isArray(s.corrected)) return;
+            const dist = signatureDistance(signature, s.signature);
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = s;
+            }
+        });
+        if (!best) return null;
+        if (bestDist > 0.25) return null;
+        return best;
+    }
+
+    function getShapeRatios(signature) {
+        const w = Math.max(0.01, signature.w || 0.01);
+        const h = Math.max(0.01, signature.h || 0.01);
+        const d = Math.max(0.01, signature.d || 0.01);
+        return {
+            wh: w / h,
+            dh: d / h,
+            wd: w / d
+        };
+    }
+
+    function getBestGeneralizedSample(signature) {
+        const a = getShapeRatios(signature);
+        let best = null;
+        let bestDist = Infinity;
+        learningState.samples.forEach(s => {
+            if (!s || !s.signature || !Array.isArray(s.corrected)) return;
+            if (s.signature.weightKey !== signature.weightKey) return;
+            const b = getShapeRatios(s.signature);
+            const ratioDist = Math.abs(a.wh - b.wh) + Math.abs(a.dh - b.dh) + Math.abs(a.wd - b.wd);
+            const countPenalty = Math.abs((signature.count || 0) - (s.signature.count || 0)) * 0.4;
+            const dist = ratioDist + countPenalty;
+            if (dist < bestDist) {
+                bestDist = dist;
+                best = s;
+            }
+        });
+        if (!best) return null;
+        if (bestDist > 1.2) return null;
+        return best;
+    }
+
+    function normalizeEditedRows(rows) {
+        return (rows || [])
+            .filter(r => Number.isFinite(r.sts) && r.sts > 0 && String(r.desc || "").trim().length > 0)
+            .map((r, i) => ({ rnd: i + 1, desc: String(r.desc || "").trim(), sts: Math.round(r.sts) }));
+    }
+
+    function generateInstructionFromKind(kind, sts, prevSts) {
+        if (kind === "magic") return "6 sc in magic ring";
+        if (kind === "inc") {
+            const delta = Math.max(1, sts - prevSts);
+            return `inc x${delta}`;
+        }
+        if (kind === "dec") {
+            const delta = Math.max(1, prevSts - sts);
+            return `dec x${delta}`;
+        }
+        return "sc around";
+    }
+
+    function buildGeneralizedRoundsFromSample(sampleRows, baseRounds) {
+        const src = normalizeEditedRows(sampleRows);
+        if (!src.length) return baseRounds;
+
+        const targetLen = Math.max(4, (baseRounds || []).length || src.length);
+        const targetMax = Math.max(6, ...(baseRounds || []).map(r => r.sts || 0));
+        const srcMax = Math.max(6, ...src.map(r => r.sts || 0));
+
+        const stuffIdxSrc = src.findIndex(r => String(r.desc || "").toLowerCase().includes("stuff"));
+        const stuffRatio = stuffIdxSrc >= 0 ? (stuffIdxSrc / Math.max(1, src.length - 1)) : null;
+
+        const out = [];
+        let prevSts = 6;
+        for (let i = 0; i < targetLen; i++) {
+            const srcIdx = Math.round((i / Math.max(1, targetLen - 1)) * Math.max(0, src.length - 1));
+            const srcRow = src[srcIdx];
+            const kind = i === 0 ? "magic" : classifyInstruction(srcRow.desc);
+
+            let sts;
+            if (i === 0) sts = 6;
+            else {
+                const scaled = Math.max(1, Math.round((srcRow.sts / srcMax) * targetMax));
+                sts = Math.max(6, Math.round(scaled / 6) * 6);
+                if (kind === "inc" && sts <= prevSts) sts = prevSts + 6;
+                if (kind === "dec" && sts >= prevSts) sts = Math.max(6, prevSts - 6);
+                if (kind === "sc") sts = prevSts;
+            }
+
+            const desc = generateInstructionFromKind(kind, sts, prevSts);
+            out.push({ rnd: i + 1, desc, sts });
+            prevSts = sts;
+        }
+
+        if (stuffRatio !== null && out.length >= 4) {
+            const stuffIdx = Math.max(1, Math.min(out.length - 2, Math.round(stuffRatio * (out.length - 1))));
+            out[stuffIdx].desc = `${out[stuffIdx].desc} | stuff firmly`;
+        }
+        return out;
+    }
+
+    function getVertexCloud(targets) {
+        const cloud = [];
+        let sumX = 0, sumZ = 0, count = 0;
+        let minY = Infinity, maxY = -Infinity;
+        targets.forEach(obj => {
+            const pos = obj.geometry.attributes.position;
+            const matrix = obj.matrixWorld;
+            for (let i = 0; i < pos.count; i++) {
+                const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(matrix);
+                cloud.push(v);
+                sumX += v.x; sumZ += v.z; count++;
+                if (v.y < minY) minY = v.y;
+                if (v.y > maxY) maxY = v.y;
+            }
+        });
+        return {
+            vertices: cloud,
+            centerX: count ? (sumX / count) : 0,
+            centerZ: count ? (sumZ / count) : 0,
+            minY: isFinite(minY) ? minY : 0,
+            maxY: isFinite(maxY) ? maxY : 0
+        };
+    }
+
+    function applyAxisPreview(egg, enabled) {
+        if (!egg || !egg.material) return;
+        const mats = Array.isArray(egg.material) ? egg.material : [egg.material];
+        mats.forEach(mat => {
+            if (!mat) return;
+            if (enabled) {
+                if (!mat.userData.axisPreviewBackup) {
+                    mat.userData.axisPreviewBackup = {
+                        wireframe: !!mat.wireframe,
+                        transparent: !!mat.transparent,
+                        opacity: Number.isFinite(mat.opacity) ? mat.opacity : 1,
+                        depthWrite: mat.depthWrite !== false
+                    };
+                }
+                mat.wireframe = true;
+                mat.transparent = true;
+                mat.opacity = 0.22;
+                mat.depthWrite = false;
+                mat.needsUpdate = true;
+            } else if (mat.userData.axisPreviewBackup) {
+                const b = mat.userData.axisPreviewBackup;
+                mat.wireframe = !!b.wireframe;
+                mat.transparent = !!b.transparent;
+                mat.opacity = b.opacity;
+                mat.depthWrite = b.depthWrite;
+                mat.needsUpdate = true;
+                delete mat.userData.axisPreviewBackup;
+            }
+        });
+    }
+
+    function updateAxisModeButton() {
+        const btn = document.getElementById('axis-pick-btn');
+        if (!btn) return;
+        btn.classList.toggle('active', isAxisPickMode);
+    }
+
+    function clearSliceAxisSelection() {
+        selectedSliceAxis = null;
+        axisPickStage = "start";
+        axisSelectionLocked = false;
+        if (axisPreviewTarget) {
+            applyAxisPreview(axisPreviewTarget, false);
+            axisPreviewTarget = null;
+        }
+        updateAxisPickMarkers();
+    }
+
+    function deactivateAxisPickMode(clearAxis = false, keepPreview = false) {
+        if (!keepPreview && axisPreviewTarget) {
+            applyAxisPreview(axisPreviewTarget, false);
+            axisPreviewTarget = null;
+        }
+        isAxisPickMode = false;
+        axisPickStage = "start";
+        updateAxisModeButton();
+        if (clearAxis) clearSliceAxisSelection();
+    }
+
+    function getAxisMarkerColor(kind) {
+        return kind === "start" ? 0x00d1ff : 0xffa94d;
+    }
+
+    function getSliceAxisWorldPoints() {
+        if (!selectedSliceAxis || !selectedSliceAxis.egg || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) return null;
+        const egg = selectedSliceAxis.egg;
+        return {
+            egg,
+            start: selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld),
+            end: selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld)
+        };
+    }
+
+    function getEggPoleWorldPoints(egg) {
+        if (!egg || !egg.geometry) return null;
+        egg.geometry.computeBoundingBox();
+        const box = egg.geometry.boundingBox;
+        if (!box) return null;
+        const centerX = (box.min.x + box.max.x) * 0.5;
+        const centerZ = (box.min.z + box.max.z) * 0.5;
+        return {
+            top: new THREE.Vector3(centerX, box.max.y, centerZ).applyMatrix4(egg.matrixWorld),
+            bottom: new THREE.Vector3(centerX, box.min.y, centerZ).applyMatrix4(egg.matrixWorld)
+        };
+    }
+
+    function pickAxisPointFromRay(raycaster, egg) {
+        const hits = raycaster.intersectObject(egg);
+        if (hits.length > 0) return hits[0].point.clone();
+
+        const poles = getEggPoleWorldPoints(egg);
+        if (!poles) return null;
+
+        const dTop = raycaster.ray.distanceSqToPoint(poles.top);
+        const dBottom = raycaster.ray.distanceSqToPoint(poles.bottom);
+        const snapThreshold = 9.0;
+        if (dTop <= snapThreshold || dBottom <= snapThreshold) {
+            return dTop <= dBottom ? poles.top.clone() : poles.bottom.clone();
+        }
+        return null;
+    }
+
+    function updateAxisPickMarkers() {
+        axisPickMarkers.forEach(marker => marker.visible = false);
+        if (!selectedSliceAxis || !selectedSliceAxis.egg) return;
+
+        const egg = selectedSliceAxis.egg;
+        if (selectedSliceAxis.startLocal && axisPickMarkers[0]) {
+            const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
+            axisPickMarkers[0].visible = true;
+            axisPickMarkers[0].position.copy(startW);
+            axisPickMarkers[0].material.color.set(getAxisMarkerColor("start"));
+        }
+        if (selectedSliceAxis.endLocal && axisPickMarkers[1]) {
+            const endW = selectedSliceAxis.endLocal.clone().applyMatrix4(egg.matrixWorld);
+            axisPickMarkers[1].visible = true;
+            axisPickMarkers[1].position.copy(endW);
+            axisPickMarkers[1].material.color.set(getAxisMarkerColor("end"));
+        }
+    }
+
+    function getAxisDescriptor(worldAxis) {
+        const dir = worldAxis.end.clone().sub(worldAxis.start);
+        const len = dir.length();
+        if (!Number.isFinite(len) || len < 1e-6) return "axis_invalid";
+        dir.normalize();
+        return `${dir.x.toFixed(2)}_${dir.y.toFixed(2)}_${dir.z.toFixed(2)}_${(len * CM_RATIO).toFixed(2)}`;
+    }
+
+    function setSliceAxisPoint(egg, worldPoint) {
+        if (!egg || !worldPoint) return;
+        if (!selectedSliceAxis || selectedSliceAxis.egg !== egg || axisPickStage === "start") {
+            selectedSliceAxis = {
+                egg,
+                startLocal: egg.worldToLocal(worldPoint.clone()),
+                endLocal: null
+            };
+            axisPickStage = "end";
+        } else {
+            const endLocal = egg.worldToLocal(worldPoint.clone());
+            const startW = selectedSliceAxis.startLocal.clone().applyMatrix4(egg.matrixWorld);
+            const endW = endLocal.clone().applyMatrix4(egg.matrixWorld);
+            if (startW.distanceTo(endW) < 0.3) {
+                alert("Start and end points are too close. Please choose again.");
+                return;
+            }
+            selectedSliceAxis.endLocal = endLocal;
+            axisSelectionLocked = true;
+            deactivateAxisPickMode(false, true);
+        }
+        updateAxisPickMarkers();
+    }
+
+    window.toggleAxisPickMode = () => {
+        if (axisSelectionLocked) {
+            return alert("Axis is locked. Press ESC to cancel or press PATTERN to continue.");
+        }
+        if (!isAxisPickMode) {
+            if (currentSelection.length !== 1) {
+                return alert("Please select one object first.");
+            }
+            clearSliceAxisSelection();
+            isAxisPickMode = true;
+            axisPickStage = "start";
+            axisPreviewTarget = currentSelection[0];
+            applyAxisPreview(axisPreviewTarget, true);
+            updateAxisModeButton();
+            alert("Axis pick mode\n- Right click: pick start/end points\n- ESC: cancel axis picking");
+            updateSelectionVisuals([axisPreviewTarget]);
+            return;
+        }
+        deactivateAxisPickMode(true);
+        updateSelectionVisuals(currentSelection.length ? [currentSelection[0]] : []);
+    };
+
+
+
+    function interpolatePointByDistance(p1, p2, d1, d2) {
+        const denom = d1 - d2;
+        if (Math.abs(denom) < 1e-8) return p1.clone();
+        const t = d1 / denom;
+        return p1.clone().lerp(p2, Math.min(1, Math.max(0, t)));
+    }
+
+    function trianglePlaneIntersectionSegment(a, b, c, planePoint, planeNormal, eps = 1e-5) {
+        const points = [];
+        const edges = [[a, b], [b, c], [c, a]];
+
+        for (let i = 0; i < edges.length; i++) {
+            const p1 = edges[i][0];
+            const p2 = edges[i][1];
+            const d1 = p1.clone().sub(planePoint).dot(planeNormal);
+            const d2 = p2.clone().sub(planePoint).dot(planeNormal);
+
+            if (Math.abs(d1) <= eps && Math.abs(d2) <= eps) continue;
+            if (Math.abs(d1) <= eps) {
+                points.push(p1.clone());
+                continue;
+            }
+            if (Math.abs(d2) <= eps) {
+                points.push(p2.clone());
+                continue;
+            }
+            if ((d1 < 0 && d2 > 0) || (d1 > 0 && d2 < 0)) {
+                points.push(interpolatePointByDistance(p1, p2, d1, d2));
+            }
+        }
+
+        const unique = [];
+        const seen = new Set();
+        points.forEach(pt => {
+            const key = `${pt.x.toFixed(5)}|${pt.y.toFixed(5)}|${pt.z.toFixed(5)}`;
+            if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(pt);
+            }
+        });
+
+        if (unique.length < 2) return null;
+        if (unique.length > 2) {
+            let bestPair = [unique[0], unique[1]];
+            let bestDist = bestPair[0].distanceToSquared(bestPair[1]);
+            for (let i = 0; i < unique.length; i++) {
+                for (let j = i + 1; j < unique.length; j++) {
+                    const d = unique[i].distanceToSquared(unique[j]);
+                    if (d > bestDist) {
+                        bestDist = d;
+                        bestPair = [unique[i], unique[j]];
+                    }
+                }
+            }
+            return bestPair;
+        }
+        return [unique[0], unique[1]];
+    }
+
+    function getSlicePerimeterWorld(targets, planePoint, planeNormal, eps = 1e-5) {
+        const pointKey = (pt) => `${pt.x.toFixed(5)}|${pt.y.toFixed(5)}|${pt.z.toFixed(5)}`;
+        const points = [];
+        const pointIndexByKey = new Map();
+        const uniqueSegments = new Map();
+
+        const getPointIndex = (pt) => {
+            const key = pointKey(pt);
+            if (pointIndexByKey.has(key)) return pointIndexByKey.get(key);
+            const idx = points.length;
+            points.push(pt.clone());
+            pointIndexByKey.set(key, idx);
+            return idx;
+        };
+
+        targets.forEach(obj => {
+            if (!obj || !obj.geometry || !obj.geometry.attributes || !obj.geometry.attributes.position) return;
+            const pos = obj.geometry.attributes.position;
+            const idx = obj.geometry.index;
+            const matrix = obj.matrixWorld;
+            const triCount = idx ? Math.floor(idx.count / 3) : Math.floor(pos.count / 3);
+
+            for (let tri = 0; tri < triCount; tri++) {
+                const ia = idx ? idx.getX((tri * 3) + 0) : (tri * 3) + 0;
+                const ib = idx ? idx.getX((tri * 3) + 1) : (tri * 3) + 1;
+                const ic = idx ? idx.getX((tri * 3) + 2) : (tri * 3) + 2;
+
+                const a = new THREE.Vector3(pos.getX(ia), pos.getY(ia), pos.getZ(ia)).applyMatrix4(matrix);
+                const b = new THREE.Vector3(pos.getX(ib), pos.getY(ib), pos.getZ(ib)).applyMatrix4(matrix);
+                const c = new THREE.Vector3(pos.getX(ic), pos.getY(ic), pos.getZ(ic)).applyMatrix4(matrix);
+
+                const seg = trianglePlaneIntersectionSegment(a, b, c, planePoint, planeNormal, eps);
+                if (!seg) continue;
+
+                const p0 = getPointIndex(seg[0]);
+                const p1 = getPointIndex(seg[1]);
+                if (p0 === p1) continue;
+                const key = p0 < p1 ? `${p0}:${p1}` : `${p1}:${p0}`;
+                if (!uniqueSegments.has(key)) uniqueSegments.set(key, [p0, p1]);
+            }
+        });
+
+        if (uniqueSegments.size === 0) return 0;
+
+        const segments = Array.from(uniqueSegments.values());
+        const adjacency = new Map();
+        const edgeLength = new Map();
+
+        const addAdj = (a, b, edgeId) => {
+            if (!adjacency.has(a)) adjacency.set(a, []);
+            adjacency.get(a).push({ node: b, edgeId });
+        };
+
+        segments.forEach((seg, i) => {
+            const a = seg[0], b = seg[1];
+            addAdj(a, b, i);
+            addAdj(b, a, i);
+            edgeLength.set(i, points[a].distanceTo(points[b]));
+        });
+
+        const usedEdges = new Set();
+        const contours = [];
+
+        const traceContour = (startNode, preferredEdgeId = null) => {
+            let current = startNode;
+            let prev = null;
+            let seedEdge = preferredEdgeId;
+            const nodePath = [startNode];
+            let length = 0;
+
+            while (true) {
+                const neighbors = adjacency.get(current) || [];
+                let choice = null;
+
+                for (let i = 0; i < neighbors.length; i++) {
+                    const n = neighbors[i];
+                    if (usedEdges.has(n.edgeId)) continue;
+                    if (seedEdge !== null && n.edgeId !== seedEdge) continue;
+                    if (prev !== null && n.node === prev && neighbors.length > 1) continue;
+                    choice = n;
+                    break;
+                }
+
+                if (!choice && seedEdge !== null) {
+                    seedEdge = null;
+                    continue;
+                }
+                if (!choice) break;
+
+                usedEdges.add(choice.edgeId);
+                length += edgeLength.get(choice.edgeId) || 0;
+                prev = current;
+                current = choice.node;
+                nodePath.push(current);
+                seedEdge = null;
+
+                if (current === startNode) break;
+            }
+
+            const closed = nodePath.length > 2 && nodePath[0] === nodePath[nodePath.length - 1];
+            if (length > 0) contours.push({ length, closed });
+        };
+
+        const nodesByDegree = Array.from(adjacency.entries()).map(([node, neigh]) => ({ node, degree: neigh.length }));
+
+        nodesByDegree
+            .filter(item => item.degree !== 2)
+            .forEach(item => {
+                const neighbors = adjacency.get(item.node) || [];
+                neighbors.forEach(n => {
+                    if (!usedEdges.has(n.edgeId)) traceContour(item.node, n.edgeId);
+                });
+            });
+
+        segments.forEach((_, edgeId) => {
+            if (usedEdges.has(edgeId)) return;
+            const a = segments[edgeId][0];
+            traceContour(a, edgeId);
+        });
+
+        const closedPerimeter = contours
+            .filter(c => c.closed)
+            .reduce((sum, c) => sum + c.length, 0);
+
+        if (closedPerimeter > 0) return closedPerimeter;
+        return contours.reduce((sum, c) => sum + c.length, 0);
+    }
+
+    function estimatePrincipalAxis(vertices) {
+        if (!vertices || vertices.length === 0) return new THREE.Vector3(0, 1, 0);
+        let mean = new THREE.Vector3();
+        vertices.forEach(v => mean.add(v));
+        mean.multiplyScalar(1 / vertices.length);
+
+        let xx = 0, xy = 0, xz = 0, yy = 0, yz = 0, zz = 0;
+        vertices.forEach(v => {
+            const x = v.x - mean.x;
+            const y = v.y - mean.y;
+            const z = v.z - mean.z;
+            xx += x * x; xy += x * y; xz += x * z;
+            yy += y * y; yz += y * z; zz += z * z;
+        });
+
+        let axis = new THREE.Vector3(0.37, 0.91, 0.17).normalize();
+        for (let i = 0; i < 12; i++) {
+            const nx = (xx * axis.x) + (xy * axis.y) + (xz * axis.z);
+            const ny = (xy * axis.x) + (yy * axis.y) + (yz * axis.z);
+            const nz = (xz * axis.x) + (yz * axis.y) + (zz * axis.z);
+            axis.set(nx, ny, nz);
+            if (axis.lengthSq() < 1e-12) {
+                axis.set(0, 1, 0);
+                break;
+            }
+            axis.normalize();
+        }
+        return axis.normalize();
+    }
+
+    function buildPlaneBasis(normal) {
+        const n = normal.clone().normalize();
+        const helper = Math.abs(n.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0);
+        const u = new THREE.Vector3().crossVectors(n, helper).normalize();
+        const v = new THREE.Vector3().crossVectors(n, u).normalize();
+        return { u, v, n };
+    }
+
+    function sampleSliceShapeStats(vertices, planePoint, axisDir, bandHalfThickness) {
+        if (!vertices || !vertices.length) return null;
+        const basis = buildPlaneBasis(axisDir);
+        const pts2 = [];
+        const thickness = Math.max(1e-4, bandHalfThickness || 0.1);
+        vertices.forEach(p => {
+            const rel = p.clone().sub(planePoint);
+            const d = rel.dot(basis.n);
+            if (Math.abs(d) > thickness) return;
+            pts2.push({
+                x: rel.dot(basis.u),
+                y: rel.dot(basis.v)
+            });
+        });
+        if (pts2.length < 8) return null;
+
+        let meanX = 0, meanY = 0;
+        pts2.forEach(p => { meanX += p.x; meanY += p.y; });
+        meanX /= pts2.length;
+        meanY /= pts2.length;
+
+        let xx = 0, xy = 0, yy = 0;
+        pts2.forEach(p => {
+            const dx = p.x - meanX;
+            const dy = p.y - meanY;
+            xx += dx * dx;
+            xy += dx * dy;
+            yy += dy * dy;
+        });
+        xx /= pts2.length;
+        xy /= pts2.length;
+        yy /= pts2.length;
+
+        const tr = xx + yy;
+        const det = (xx * yy) - (xy * xy);
+        const delta = Math.sqrt(Math.max(0, (tr * tr * 0.25) - det));
+        const l1 = Math.max(1e-9, (tr * 0.5) + delta);
+        const l2 = Math.max(1e-9, (tr * 0.5) - delta);
+        const major = Math.sqrt(Math.max(l1, l2));
+        const minor = Math.sqrt(Math.min(l1, l2));
+        const ar = major / Math.max(1e-6, minor);
+
+        return {
+            ar,
+            majorCmProxy: major * CM_RATIO * 2,
+            minorCmProxy: minor * CM_RATIO * 2,
+            pointCount: pts2.length
+        };
+    }
+
+    function estimateEllipseAxesFromPerimeter(perimeterCm, ar = 1) {
+        const ratio = Math.max(1, Math.min(4, ar || 1));
+        const p = Math.max(0.05, perimeterCm || 0.05);
+        if (!Number.isFinite(p)) return { a: p / (2 * Math.PI), b: p / (2 * Math.PI) };
+        if (Math.abs(ratio - 1) < 1e-3) {
+            const r = p / (2 * Math.PI);
+            return { a: r, b: r };
+        }
+
+        const ellipsePerimeter = (a, b) => {
+            const h = Math.pow(a - b, 2) / Math.pow(a + b, 2);
+            return Math.PI * (a + b) * (1 + ((3 * h) / (10 + Math.sqrt(Math.max(1e-9, 4 - (3 * h))))));
+        };
+
+        let lo = 0.001;
+        let hi = Math.max(0.05, p);
+        for (let i = 0; i < 24; i++) {
+            const mid = (lo + hi) * 0.5;
+            const est = ellipsePerimeter(mid * ratio, mid);
+            if (est > p) hi = mid;
+            else lo = mid;
+        }
+        const b = (lo + hi) * 0.5;
+        const a = b * ratio;
+        return { a, b };
+    }
+
+    function chooseStartTemplate(features) {
+        const roundDefault = { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 };
+        if (!features) return roundDefault;
+
+        const meanAR = features.meanAR || 1;
+        const midAR = features.midAR || meanAR;
+        const growth = features.earlyGrowth || 0;
+        const stability = features.stability || 0;
+        const consistency = features.startMidConsistency ?? 1;
+        const firstCirc = Math.max(0.05, features.firstCircumferenceCm || 0.05);
+        const stitchWidthCm = Math.max(0.1, features.stitchWidthCm || 0.3);
+        const approxStart = Math.max(4, Math.round(firstCirc / stitchWidthCm));
+        const ovalGate = meanAR >= 1.35 && stability < 0.28 && consistency >= 0.78;
+        const roundGate = meanAR <= 1.18 && midAR <= 1.2 && consistency >= 0.82;
+
+        if (roundGate) return roundDefault;
+
+        if (ovalGate) {
+            const axes = estimateEllipseAxesFromPerimeter(firstCirc, meanAR);
+            const straightLenCm = Math.max(0, (2 * axes.a) - (2 * axes.b));
+            const chainCount = Math.max(3, Math.round(straightLenCm / stitchWidthCm) + 2);
+            const totalStart = Math.max(8, Math.round((approxStart + 2) / 2) * 2);
+            return {
+                kind: "oval",
+                startSts: totalStart,
+                desc: `ch ${chainCount}, oval start (sc around chain)`,
+                snapBase: 2,
+                chainCount
+            };
+        }
+
+        if (firstCirc >= stitchWidthCm * 10 && growth < 0.12) {
+            const startSts = Math.max(8, Math.min(12, Math.round(approxStart / 2) * 2));
+            return { kind: "flat", startSts, desc: `${startSts} sc in magic ring`, snapBase: 4 };
+        }
+
+        if (growth < 0.18 && stability < 0.16) {
+            const startSts = Math.max(6, Math.min(8, Math.round(approxStart / 2) * 2));
+            return { kind: "tube", startSts, desc: `${startSts} sc in magic ring`, snapBase: 2 };
+        }
+
+        return roundDefault;
+    }
+
+    function buildRoundsFromSlices(targets, weightKey, config, sliceAxis = null) {
+        const axisWorld = sliceAxis && sliceAxis.start && sliceAxis.end ? {
+            start: sliceAxis.start.clone(),
+            end: sliceAxis.end.clone(),
+            mode: "custom"
+        } : null;
+
+        const signature = buildDesignSignature(targets, weightKey, axisWorld ? getAxisDescriptor(axisWorld) : "pca");
+        const stepCm = Math.max(0.1, config.roundH);
+        const stitchWidthCm = learningState.stitchWidthByWeight[weightKey] || getDefaultStitchWidthCm(config);
+
+        const cloud = getVertexCloud(targets);
+        if (!cloud.vertices.length) {
+            const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+            const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
+            return {
+                rounds: fallback,
+                profiles,
+                stitchWidthCm,
+                stepCm,
+                signature,
+                axisMode: axisWorld ? "custom" : "pca",
+                startTemplate: { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 }
+            };
+        }
+
+        let axisStart;
+        let axisEnd;
+        if (axisWorld) {
+            const center = new THREE.Vector3(cloud.centerX, (cloud.minY + cloud.maxY) * 0.5, cloud.centerZ);
+            const userDir = axisWorld.end.clone().sub(axisWorld.start);
+            if (userDir.lengthSq() < 1e-10) {
+                axisStart = axisWorld.start.clone();
+                axisEnd = axisWorld.end.clone();
+            } else {
+                userDir.normalize();
+                let minProj = Infinity;
+                let maxProj = -Infinity;
+                cloud.vertices.forEach(v => {
+                    const proj = v.clone().sub(center).dot(userDir);
+                    if (proj < minProj) minProj = proj;
+                    if (proj > maxProj) maxProj = proj;
+                });
+                axisStart = center.clone().add(userDir.clone().multiplyScalar(minProj));
+                axisEnd = center.clone().add(userDir.clone().multiplyScalar(maxProj));
+            }
+        } else {
+            const center = new THREE.Vector3(cloud.centerX, (cloud.minY + cloud.maxY) * 0.5, cloud.centerZ);
+            const principal = estimatePrincipalAxis(cloud.vertices);
+            let minProj = Infinity;
+            let maxProj = -Infinity;
+            cloud.vertices.forEach(v => {
+                const proj = v.clone().sub(center).dot(principal);
+                if (proj < minProj) minProj = proj;
+                if (proj > maxProj) maxProj = proj;
+            });
+            axisStart = center.clone().add(principal.clone().multiplyScalar(minProj));
+            axisEnd = center.clone().add(principal.clone().multiplyScalar(maxProj));
+        }
+
+        const axisVec = axisEnd.clone().sub(axisStart);
+        const axisLen = axisVec.length();
+        if (!Number.isFinite(axisLen) || axisLen < 1e-6) {
+            const fallback = [{ rnd: 1, desc: "6 sc in magic ring", sts: 6 }];
+            const profiles = [{ rnd: 1, distanceCm: 0, circumferenceCm: stitchWidthCm * 6 }];
+            return {
+                rounds: fallback,
+                profiles,
+                stitchWidthCm,
+                stepCm,
+                signature,
+                axisMode: axisWorld ? "custom" : "pca",
+                startTemplate: { kind: "round", startSts: 6, desc: "6 sc in magic ring", snapBase: 6 }
+            };
+        }
+
+        const axisDir = axisVec.clone().normalize();
+        const stepWorld = Math.max(0.12, stepCm / CM_RATIO);
+        const sliceCount = Math.max(4, Math.min(260, Math.round(axisLen / stepWorld) + 1));
+        const orderedSlices = [];
+        const earlyShapeSamples = [];
+        const midShapeSamples = [];
+
+        for (let i = 0; i < sliceCount; i++) {
+            const t = sliceCount <= 1 ? 0 : (i / (sliceCount - 1));
+            const pointOnAxis = axisStart.clone().lerp(axisEnd, t);
+
+            let perimeterWorld = getSlicePerimeterWorld(targets, pointOnAxis, axisDir, 1e-5);
+            if (perimeterWorld <= 1e-6) {
+                const probe = Math.max(0.03, stepWorld * 0.18);
+                perimeterWorld = Math.max(
+                    getSlicePerimeterWorld(targets, pointOnAxis.clone().add(axisDir.clone().multiplyScalar(probe)), axisDir, 1e-5),
+                    getSlicePerimeterWorld(targets, pointOnAxis.clone().add(axisDir.clone().multiplyScalar(-probe)), axisDir, 1e-5)
+                );
+            }
+
+            const circumferenceCm = Math.max(0.05, perimeterWorld * CM_RATIO);
+            const rawSts = Math.max(1, Math.round(circumferenceCm / Math.max(0.1, stitchWidthCm)));
+            orderedSlices.push({
+                distanceCm: (axisLen * t) * CM_RATIO,
+                circumferenceCm,
+                sts: Math.max(4, rawSts)
+            });
+
+            if (i < Math.min(5, sliceCount)) {
+                const shape = sampleSliceShapeStats(cloud.vertices, pointOnAxis, axisDir, stepWorld * 0.55);
+                if (shape) earlyShapeSamples.push(shape);
+            }
+            if (sliceCount > 6) {
+                const centerIdx = Math.floor(sliceCount * 0.5);
+                const midWindow = Math.max(1, Math.floor(sliceCount * 0.08));
+                if (Math.abs(i - centerIdx) <= midWindow) {
+                    const shape = sampleSliceShapeStats(cloud.vertices, pointOnAxis, axisDir, stepWorld * 0.55);
+                    if (shape) midShapeSamples.push(shape);
+                }
+            }
+        }
+
+        const meanAR = earlyShapeSamples.length
+            ? earlyShapeSamples.reduce((s, x) => s + x.ar, 0) / earlyShapeSamples.length
+            : 1;
+        const stability = earlyShapeSamples.length > 1
+            ? (() => {
+                const m = meanAR;
+                const variance = earlyShapeSamples.reduce((s, x) => s + Math.pow(x.ar - m, 2), 0) / earlyShapeSamples.length;
+                return Math.sqrt(Math.max(0, variance)) / Math.max(1e-6, m);
+            })()
+            : 0;
+        const earlyCount = Math.min(4, orderedSlices.length);
+        const firstCirc = orderedSlices[0]?.circumferenceCm || (stitchWidthCm * 6);
+        const earlyLastCirc = orderedSlices[Math.max(0, earlyCount - 1)]?.circumferenceCm || firstCirc;
+        const earlyGrowth = (earlyLastCirc - firstCirc) / Math.max(1e-6, firstCirc);
+        const midAR = midShapeSamples.length
+            ? midShapeSamples.reduce((s, x) => s + x.ar, 0) / midShapeSamples.length
+            : meanAR;
+        const startMidConsistency = 1 - Math.min(1, Math.abs(meanAR - midAR) / Math.max(1e-6, Math.max(meanAR, midAR, 1)));
+        const startTemplate = chooseStartTemplate({
+            meanAR,
+            midAR,
+            earlyGrowth,
+            stability,
+            startMidConsistency,
+            firstCircumferenceCm: firstCirc,
+            stitchWidthCm
+        });
+        const snapBase = Math.max(2, startTemplate.snapBase || 6);
+
+        const smoothedSts = orderedSlices.map((slice, i) => {
+            const prev = orderedSlices[Math.max(0, i - 1)].sts;
+            const cur = slice.sts;
+            const next = orderedSlices[Math.min(orderedSlices.length - 1, i + 1)].sts;
+            const averaged = (prev + cur + next) / 3;
+            const minSts = Math.max(4, startTemplate.startSts || 6);
+            return Math.max(minSts, Math.round(averaged / snapBase) * snapBase);
+        });
+
+        const rounds = [{ rnd: 1, desc: startTemplate.desc, sts: startTemplate.startSts }];
+        const profiles = [{ rnd: 1, distanceCm: orderedSlices[0].distanceCm, circumferenceCm: orderedSlices[0].circumferenceCm }];
+
+        let prevSts = startTemplate.startSts;
+        for (let i = 1; i < smoothedSts.length; i++) {
+            const targetSts = Math.max(Math.max(4, startTemplate.startSts), smoothedSts[i]);
+            const delta = targetSts - prevSts;
+            let desc = "sc around";
+            if (delta > 0) desc = `inc x${delta}`;
+            else if (delta < 0) desc = `dec x${Math.abs(delta)}`;
+
+            rounds.push({ rnd: rounds.length + 1, desc, sts: targetSts });
+            profiles.push({ rnd: rounds.length, distanceCm: orderedSlices[i].distanceCm, circumferenceCm: orderedSlices[i].circumferenceCm });
+            prevSts = targetSts;
+        }
+
+        const compact = [rounds[0]];
+        for (let i = 1; i < rounds.length; i++) {
+            const row = rounds[i];
+            const prev = compact[compact.length - 1];
+            if (row.desc === "sc around" && prev.desc === "sc around" && row.sts === prev.sts) continue;
+            compact.push({ rnd: compact.length + 1, desc: row.desc, sts: row.sts });
+        }
+
+        if (compact.length >= 4) {
+            const stuffIdx = compact.length - 3;
+            compact[stuffIdx].desc = `${compact[stuffIdx].desc} | stuff firmly`;
+        }
+
+        return {
+            rounds: compact,
+            profiles,
+            stitchWidthCm,
+            stepCm,
+            signature,
+            axisMode: axisWorld ? "custom" : "pca",
+            startTemplate
+        };
+    }
+
+
+    function validatePattern(rounds, meta = null) {
+        const warnings = [];
+        if (!rounds.length) {
+            warnings.push("No rounds generated.");
+            return warnings;
+        }
+        const kind = meta && meta.kind ? meta.kind : "round";
+        const expectedStart = meta && Number.isFinite(meta.startSts) ? meta.startSts : 6;
+        if (rounds[0].rnd !== 1) warnings.push("Pattern should start at R1.");
+        if (kind === "round" && rounds[0].sts !== 6) warnings.push("R1 should start at 6 stitches for standard amigurumi.");
+        if ((kind === "oval" || kind === "flat" || kind === "tube") && Math.abs(rounds[0].sts - expectedStart) > 2) {
+            warnings.push(`R1 start stitches differ from selected ${kind} template.`);
+        }
+
+        for (let i = 1; i < rounds.length; i++) {
+            const prev = rounds[i - 1];
+            const cur = rounds[i];
+            const delta = cur.sts - prev.sts;
+            const kind = classifyInstruction(cur.desc);
+            if (kind === "sc" && delta !== 0) warnings.push(`R${cur.rnd} has sc-only instruction but stitch count changed.`);
+            if (kind === "inc" && delta <= 0) warnings.push(`R${cur.rnd} increase row should raise stitch count.`);
+            if (kind === "dec" && delta >= 0) warnings.push(`R${cur.rnd} decrease row should lower stitch count.`);
+        }
+        const finalThreshold = kind === "round" ? 8 : Math.max(10, expectedStart + 2);
+        if (rounds[rounds.length - 1].sts > finalThreshold) {
+            warnings.push(`Final round is not closed enough for ${kind} template.`);
+        }
+        return warnings;
+    }
+
+    function init() {
+        scene = new THREE.Scene(); scene.background = new THREE.Color(0xffffff);
+        camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 100) / window.innerHeight, 0.1, 1000);
+        camera.position.set(60, 50, 80);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth - 100, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+        renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+        
+        scene.add(new THREE.GridHelper(100, 20, 0xcccccc, 0xeeeeee));
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const mainLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        mainLight.position.set(10, 20, 15); scene.add(mainLight);
+        
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: null };
+        
+        createHandles(); createGhost(); createGroupGizmo();
+        window.addEventListener('pointerdown', onDown);
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+        window.addEventListener('keydown', onKeyDown);
+        
+        loadLearningState();
+        captureState(); animate();
+    }
+
+    // --- [ Pattern Generation Logic (Restored & Enhanced) ] ---
+    window.openPatternModal = () => { 
+        if (currentSelection.length !== 1) return alert("Please select one design object.");
+        if (!axisSelectionLocked || !selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
+            return alert("Use AXIS to pick start/end points first, then press PATTERN.");
+        }
+        document.getElementById('pattern-modal').style.display='block'; 
+        document.getElementById('modal-overlay').style.display='block'; 
+    };
+    window.closeModal = () => { 
+        document.getElementById('pattern-modal').style.display='none'; 
+        document.getElementById('modal-overlay').style.display='none'; 
+    };
+
+    window.startAIAnalysis = () => {
+        const weightKey = document.getElementById('yarn-weight-select').value;
+        const pName = document.getElementById('pattern-name-input').value;
+        const config = yarnWeights[weightKey];
+        if (currentSelection.length !== 1 || !axisSelectionLocked || !selectedSliceAxis || selectedSliceAxis.egg !== currentSelection[0] || !selectedSliceAxis.startLocal || !selectedSliceAxis.endLocal) {
+            closeModal();
+            return alert("Use AXIS to pick start/end points first, then press PATTERN.");
+        }
+
+        const axisWorld = getSliceAxisWorldPoints();
+        if (!axisWorld) {
+            closeModal();
+            return alert("Axis data is invalid. Please pick AXIS again.");
+        }
+
+        deactivateAxisPickMode(true);
+        closeModal();
+
+        const targets = [axisWorld.egg];
+        const generated = buildRoundsFromSlices(targets, weightKey, config, axisWorld);
+        let rounds = generated.rounds;
+        const designSignature = generated.signature || buildDesignSignature(targets, weightKey, getAxisDescriptor(axisWorld));
+        lastGenerationContext = {
+            weightKey,
+            projectName: pName,
+            generatedRounds: rounds.map(x => ({ rnd: x.rnd, desc: x.desc, sts: x.sts || 0 })),
+            profiles: generated.profiles,
+            stitchWidthCm: generated.stitchWidthCm,
+            stepCm: generated.stepCm,
+            signature: designSignature,
+            axisMode: generated.axisMode,
+            startTemplate: generated.startTemplate || null
+        };
+
+        // Build result popup (editable + deep learn)
+        const win = window.open("", "_blank", "width=450,height=700");
+        let html = `
+        <body style="font-family:monospace; padding:20px; background:#f9f9f9;">
+            <div style="background:white; padding:15px; border-radius:10px; box-shadow:0 2px 10px rgba(0,0,0,0.1);">
+                <h2 style="color:#007bff; margin-top:0;">🧶 ${pName}</h2>
+                <p style="font-size:12px; color:#666;">Yarn: ${config.label} | Axis: ${generated.axisMode === "custom" ? "Custom" : "PCA"} | Generated by v5.49.14</p>
+                <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; text-align:left;">
+                    <tr style="background:#eee;">
+                        <th style="padding:8px;">Rnd</th><th style="padding:8px;">Instruction</th><th style="padding:8px;">Sts</th>
+                    </tr>
+                    <tbody id="pattern-body">`;
+        rounds.forEach(x => {
+            html += `<tr>
+                        <td style="padding:8px; border:1px solid #ddd;">R${x.rnd}</td>
+                        <td style="padding:0; border:1px solid #ddd;">
+                            <input type="text" value="${x.desc}" style="width:95%; border:none; padding:8px; font-family:monospace;">
+                        </td>
+                        <td style="padding:0; border:1px solid #ddd;">
+                            <input type="number" value="${x.sts || 0}" style="width:85%; border:none; padding:8px; text-align:center; font-family:monospace;">
+                        </td>
+                     </tr>`;
+        });
+        const warnings = validatePattern(rounds, generated.startTemplate);
+        const warningHtml = warnings.length
+            ? `<div style="margin-top:10px; padding:8px; border:1px solid #f1c40f; background:#fff8db; color:#7a5d00; font-size:11px;">⚠ ${warnings.join("<br>")}</div>`
+            : `<div style="margin-top:10px; padding:8px; border:1px solid #b7ebc6; background:#effbf3; color:#1f7a36; font-size:11px;">Pattern validation: OK</div>`;
+        html += `
+                </tbody>
+                </table>
+                ${warningHtml}
+                <button onclick="addRow()" style="margin-top:10px; width:100%; height:34px; background:#f5f5f5; color:#333; border:1px solid #bbb; border-radius:8px; font-weight:bold; cursor:pointer;">
+                    Add more rows
+                </button>
+                <button onclick="submitLearn()" style="margin-top:14px; width:100%; height:42px; background:#dc3545; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">
+                    DEEP LEARN
+                </button>
+                <div id="learn-status" style="margin-top:10px; font-size:12px; color:#666; display:none;">Waiting...</div>
+                <div id="learn-progress-wrap" style="margin-top:8px; width:100%; height:10px; background:#eee; border-radius:999px; overflow:hidden; display:none;">
+                    <div id="learn-progress-bar" style="height:100%; width:0%; background:linear-gradient(90deg,#dc3545,#ff7b7b); transition:width .2s;"></div>
+                </div>
+            </div>
+            <script>
+                function setLearnProgress(percent, text) {
+                    const wrap = document.getElementById('learn-progress-wrap');
+                    const bar = document.getElementById('learn-progress-bar');
+                    const status = document.getElementById('learn-status');
+                    wrap.style.display = 'block';
+                    status.style.display = 'block';
+                    bar.style.width = Math.max(0, Math.min(100, percent)) + '%';
+                    status.textContent = text || 'Learning...';
+                }
+
+                function reindexRows() {
+                    const body = document.getElementById('pattern-body');
+                    const rows = Array.from(body.querySelectorAll('tr'));
+                    rows.forEach((row, i) => {
+                        const cell = row.children[0];
+                        if (cell) cell.textContent = 'R' + (i + 1);
+                    });
+                }
+
+                function addRow() {
+                    const body = document.getElementById('pattern-body');
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = '<td style="padding:8px; border:1px solid #ddd;"></td><td style="padding:0; border:1px solid #ddd;"><input type="text" value="sc around" style="width:95%; border:none; padding:8px; font-family:monospace;"></td><td style="padding:0; border:1px solid #ddd;"><input type="number" value="6" style="width:85%; border:none; padding:8px; text-align:center; font-family:monospace;"></td>';
+                    body.appendChild(tr);
+                    reindexRows();
+                }
+
+                async function submitLearn() {
+                    try {
+                        setLearnProgress(5, 'Reading edited pattern...');
+                        const rows = Array.from(document.querySelectorAll('#pattern-body tr'));
+                        const filtered = rows.map((row) => {
+                            const inputs = row.querySelectorAll('input');
+                            const desc = inputs[0] ? String(inputs[0].value || '').trim() : '';
+                            const sts = inputs[1] ? parseInt(inputs[1].value || '0', 10) : 0;
+                            return {
+                                desc,
+                                sts
+                            };
+                        }).filter(r => r.desc.length > 0 && Number.isFinite(r.sts) && r.sts > 0);
+                        const editedRounds = filtered.map((r, i) => ({ rnd: i + 1, desc: r.desc, sts: r.sts }));
+                        if (editedRounds.length === 0) {
+                            setLearnProgress(100, 'No valid rows. Keep rows with both Instruction and Sts.');
+                            return;
+                        }
+                        setLearnProgress(20, 'Comparing generated vs corrected...');
+                        if (window.opener && typeof window.opener.finalizeLearning === 'function') {
+                            const result = await window.opener.finalizeLearning({
+                                editedRounds: editedRounds,
+                                onProgress: (pct, msg) => setLearnProgress(pct, msg)
+                            });
+                            setLearnProgress(100, result && result.message ? result.message : 'Learning finished.');
+                        } else {
+                            setLearnProgress(100, 'Cannot connect to opener app.');
+                        }
+                    } catch (err) {
+                        setLearnProgress(100, 'Failed to learn from this pattern.');
+                    }
+                }
+            <\/script>
+        </body>`;
+        win.document.write(html);
+    };
+
+    // --- [ Restoration of 5.47.0 Core Physics (3.5th Power) ] ---
+    function createEgg(color, isGhost = false) {
+        const points = [];
+        for (let i = 0; i <= 20; i++) {
+            const t = i / 20, y = t * BASE_H, r = BASE_R * Math.sqrt(Math.max(0, 1 - Math.pow((y - 10) / 10, 2)));
+            const poleRadius = (i === 0 || i === 20) ? 0 : Math.max(0.08, r);
+            points.push(new THREE.Vector2(poleRadius, y));
+        }
+        const geo = new THREE.LatheGeometry(points, 32); geo.translate(0, -10, 0);
+        geo.userData.origPos = geo.attributes.position.clone();
+        const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: isGhost ? 0.3 : 1.0 });
+        const egg = new THREE.Mesh(geo, mat);
+        if (!isGhost) { 
+            egg.userData.isEgg = true; 
+            egg.userData.data = { scale: new THREE.Vector3(1, 1, 1), offsets: [0,1,2,3,4,5].map(()=>new THREE.Vector3()) }; 
+        }
+        return egg;
+    }
+
+    function updateMesh(egg) {
+        const pos = egg.geometry.attributes.position, orig = egg.geometry.userData.origPos, { scale, offsets } = egg.userData.data;
+        const ctrls = [new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+        for (let i = 0; i < orig.count; i++) {
+            const v = new THREE.Vector3(orig.getX(i), orig.getY(i), orig.getZ(i)), sV = v.clone().multiply(scale);
+            let tw = 0; const sOff = new THREE.Vector3();
+            for (let j = 0; j < 6; j++) {
+                const w = 1 / Math.pow(v.distanceTo(ctrls[j]) + 1, 3.5); // Legacy 3.5 exponent weighting
+                tw += w; sOff.add(offsets[j].clone().multiplyScalar(w));
+            }
+            pos.setXYZ(i, sV.x + (sOff.x/tw), sV.y + (sOff.y/tw), sV.z + (sOff.z/tw));
+        }
+        pos.needsUpdate = true;
+    }
+
+    // --- [ Drag & Interaction (Anchor Point Logic) ] ---
+    function onDown(e) {
+        if(e.target.tagName !== 'CANVAS') return;
+        const rect = renderer.domElement.getBoundingClientRect();
+        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
+        
+        if(isPlacementMode && e.button===0) {
+            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
+            if(h.length>0) spawnEgg(h[0].point); return;
+        }
+
+        if (axisSelectionLocked && !isAxisPickMode) {
+            return;
+        }
+
+        if (isAxisPickMode) {
+            if (e.button !== 2) {
+                controls.enabled = true;
+                return;
+            }
+            const targetEgg = (currentSelection.length === 1 && currentSelection[0] && currentSelection[0].userData.isEgg)
+                ? currentSelection[0]
+                : null;
+            if (!targetEgg) {
+                alert("Axis picking requires exactly one selected object.");
+                return;
+            }
+            const pickedPoint = pickAxisPointFromRay(ray, targetEgg);
+            if (!pickedPoint) {
+                alert("Right-click the object surface (tips are auto-snapped).");
+                return;
+            }
+            setSliceAxisPoint(targetEgg, pickedPoint);
+            return;
+        }
+
+        const gh = ray.intersectObjects([...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles]);
+        if(gh.length>0) {
+            clearSliceAxisSelection();
+            dragTarget = gh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
+            const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+            ray.ray.intersectPlane(pl, startIntersect);
+            if(currentEgg){
+                startRotation=currentEgg.quaternion.clone(); startPos=currentEgg.position.clone(); startScale=currentEgg.userData.data.scale.clone();
+                if(dragTarget.userData.isHandle){
+                    const id=dragTarget.userData.id, opp=(id%2===0)?id+1:id-1;
+                    const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+                    worldAnchorPos.copy(ctrls[opp]).multiply(startScale).applyQuaternion(startRotation).add(startPos); // Anchor point lock logic
+                    startHandleDist=startIntersect.distanceTo(worldAnchorPos);
+                    dragTarget.userData.startOffset=currentEgg.userData.data.offsets[id].clone();
+                } else startHandleDist=startIntersect.distanceTo(currentEgg.position);
+                lastMouseAngle=getMouseAngle(e,currentEgg);
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                startGroupData=currentSelection.map(e=>({pos:e.position.clone(),scale:e.userData.data.scale.clone(),rot:e.quaternion.clone()}));
+                startHandleDist=startIntersect.distanceTo(c); lastMouseAngle=getMouseAngle(e,{position:c});
+            } return;
+        }
+
+        const eh = ray.intersectObjects(scene.children.filter(o=>o.userData.isEgg));
+        if(eh.length>0) {
+            clearSliceAxisSelection();
+            dragTarget=eh[0].object; isDragging=true; mouseButton=e.button; controls.enabled=false;
+            if(e.button===0 && !e.ctrlKey) updateSelectionVisuals([dragTarget]);
+            else if(e.button===0 && e.ctrlKey) updateSelectionVisuals([...currentSelection, dragTarget]);
+            const pl=new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+            ray.ray.intersectPlane(pl, startIntersect);
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget)) startGroupData=currentSelection.map(eg=>({offset:eg.position.clone().sub(startIntersect)}));
+        } else {
+            clearSliceAxisSelection();
+            if(e.button===0){ updateSelectionVisuals([]); controls.enabled=true; }
+            else if(e.button===2){
+                isBoxSelecting=true; boxStart.set(e.clientX, e.clientY);
+                selectBoxEl.style.display='block'; selectBoxEl.style.width='0px'; selectBoxEl.style.height='0px';
+                updateSelectionVisuals([]); controls.enabled=false;
+            }
+        }
+    }
+
+    // --- [ Move, Up, Render & Other Logic (Skipped but identical to 5.47/5.48) ] ---
+    function onMove(e) {
+        const rect = renderer.domElement.getBoundingClientRect();
+        const m = new THREE.Vector2(((e.clientX-rect.left)/rect.width)*2-1, -((e.clientY-rect.top)/rect.height)*2+1);
+        const ray = new THREE.Raycaster(); ray.setFromCamera(m, camera);
+        if(isPlacementMode){
+            const h = ray.intersectObject(scene.children.find(o=>o.type==="GridHelper"));
+            if(h.length>0){ ghostEgg.visible=true; ghostEgg.position.copy(h[0].point).y += 10.01; }
+            else ghostEgg.visible=false;
+        }
+        if(isBoxSelecting){
+            const x=Math.min(boxStart.x, e.clientX), y=Math.min(boxStart.y, e.clientY), w=Math.abs(e.clientX-boxStart.x), h=Math.abs(e.clientY-boxStart.y);
+            selectBoxEl.style.left=x+'px'; selectBoxEl.style.top=y+'px'; selectBoxEl.style.width=w+'px'; selectBoxEl.style.height=h+'px'; return;
+        }
+        if(!isDragging || !dragTarget) return;
+        const pl = new THREE.Plane(camera.getWorldDirection(new THREE.Vector3()).negate(), -dragTarget.position.dot(camera.getWorldDirection(new THREE.Vector3()).negate()));
+        let intersect = new THREE.Vector3();
+        if(ray.ray.intersectPlane(pl, intersect)){
+            if(currentSelection.length>1 && currentSelection.includes(dragTarget) && mouseButton===0 && !dragTarget.userData.isHandle && !dragTarget.userData.isGroupHandle){
+                currentSelection.forEach((eg,i)=>eg.position.copy(intersect).add(startGroupData[i].offset));
+                updateGroupGizmoVisuals();
+            } else if(currentEgg){
+                if(dragTarget.userData.isRotationHandle){
+                    const ang=getMouseAngle(e,currentEgg), da=ang-lastMouseAngle;
+                    const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+                    currentEgg.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(ax,-da)); lastMouseAngle=ang;
+                } else if(dragTarget.userData.isEgg) dragTarget.position.copy(intersect);
+                else if(dragTarget.userData.isHandle){
+                    const id=dragTarget.userData.id, data=currentEgg.userData.data;
+                    if(mouseButton===0 && e.ctrlKey){
+                        const ld=intersect.clone().sub(startIntersect).applyQuaternion(currentEgg.quaternion.clone().invert());
+                        data.offsets[id].copy(dragTarget.userData.startOffset).add(ld); updateMesh(currentEgg);
+                    } else {
+                        const r=Math.max(0.01, intersect.distanceTo(worldAnchorPos)/startHandleDist);
+                        if(mouseButton===0) data.scale.copy(startScale).multiplyScalar(r);
+                        else if(mouseButton===2){
+                            const d=(id<2)?'y':(id<4?'x':'z'); data.scale.copy(startScale); data.scale[d]*=r;
+                            const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)], opp=(id%2===0)?id+1:id-1;
+                            const co=ctrls[opp].clone().multiply(data.scale).applyQuaternion(currentEgg.quaternion).add(currentEgg.position);
+                            currentEgg.position.add(worldAnchorPos.clone().sub(co));
+                        } updateMesh(currentEgg);
+                    }
+                }
+            } else if(currentSelection.length>1){
+                const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+                const c=b.getCenter(new THREE.Vector3());
+                if(dragTarget.userData.isGroupHandle){
+                    const r=Math.max(0.01, intersect.distanceTo(c)/startHandleDist);
+                    currentSelection.forEach((e,i)=>{e.userData.data.scale.copy(startGroupData[i].scale).multiplyScalar(r); updateMesh(e); e.position.copy(c).add(startGroupData[i].pos.clone().sub(c).multiplyScalar(r));});
+                } else if(dragTarget.userData.isGroupRotationHandle){
+                    const da=getMouseAngle(e,{position:c})-lastMouseAngle;
+                    const ax=dragTarget.userData.axis==='x'?new THREE.Vector3(1,0,0):dragTarget.userData.axis==='y'?new THREE.Vector3(0,1,0):new THREE.Vector3(0,0,1);
+                    const rq=new THREE.Quaternion().setFromAxisAngle(ax,-da);
+                    currentSelection.forEach(eg=>{eg.position.sub(c).applyQuaternion(rq).add(c); eg.quaternion.premultiply(rq);});
+                    lastMouseAngle+=da;
+                } updateGroupGizmoVisuals();
+            } updateRealTimeSize();
+        }
+    }
+
+    function onUp(e) {
+        if(isBoxSelecting){
+            isBoxSelecting=false; selectBoxEl.style.display='none';
+            const x1=Math.min(boxStart.x, e.clientX), y1=Math.min(boxStart.y, e.clientY), x2=Math.max(boxStart.x, e.clientX), y2=Math.max(boxStart.y, e.clientY);
+            const rect=renderer.domElement.getBoundingClientRect(); const selected = [];
+            scene.children.filter(o=>o.userData.isEgg).forEach(egg => {
+                const sp = egg.position.clone().project(camera);
+                const px = (sp.x + 1) * rect.width / 2 + rect.left, py = (-sp.y + 1) * rect.height / 2 + rect.top;
+                if(px >= x1 && px <= x2 && py >= y1 && py <= y2) selected.push(egg);
+            }); updateSelectionVisuals(selected);
+        }
+        if(isDragging) captureState(); isDragging=false; dragTarget=null; controls.enabled=true;
+    }
+
+    function updateSelectionVisuals(sel) {
+        currentSelection=sel; updateRealTimeSize();
+        [...handles, rotX_H, rotY_H, rotZ_H, ...groupHandles, ...groupRotHandles].forEach(h=>h.visible=false);
+        groupGizmo.visible=false; document.getElementById('palette').style.display='none';
+
+        if (sel.length !== 1 || (selectedSliceAxis && selectedSliceAxis.egg !== sel[0])) {
+            clearSliceAxisSelection();
+            if (isAxisPickMode) deactivateAxisPickMode(true);
+        }
+
+        if(sel.length===0){ currentEgg=null; return; }
+
+        if (isAxisPickMode) {
+            currentEgg = sel[0];
+            updateAxisPickMarkers();
+            return;
+        }
+
+        document.getElementById('palette').style.display='grid';
+        if(sel.length===1){ currentEgg=sel[0]; [...handles, rotX_H, rotY_H, rotZ_H].forEach(h=>h.visible=true); updateAxisPickMarkers(); }
+        else { currentEgg=null; groupGizmo.visible=true; [...groupHandles, ...groupRotHandles].forEach(h=>h.visible=true); updateGroupGizmoVisuals(); }
+    }
+
+    function createHandles() {
+        const mkH=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(1.8,16,16),new THREE.MeshBasicMaterial({color:0xffcc00,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isHandle:true,id}; scene.add(m); return m;};
+        handles=[0,1,2,3,4,5].map(id=>mkH(id));
+        const mkR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(22,0.3,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.4,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isRotationHandle:true,axis:a}; scene.add(r); return r;};
+        const mkAxisMarker=(kind)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.1,16,16),new THREE.MeshBasicMaterial({color:getAxisMarkerColor(kind),depthTest:false})); m.renderOrder=1001; m.visible=false; m.userData={isAxisMarker:true,kind}; scene.add(m); return m;};
+        axisPickMarkers=[mkAxisMarker('start'), mkAxisMarker('end')];
+        rotX_H=mkR(0xff0000,'x'); rotY_H=mkR(0x00ff00,'y'); rotZ_H=mkR(0x0000ff,'z');
+    }
+
+    function createGroupGizmo() {
+        groupGizmo=new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0xff69b4); groupGizmo.visible=false; scene.add(groupGizmo);
+        const mkG=(id)=>{const m=new THREE.Mesh(new THREE.SphereGeometry(2.5,16,16),new THREE.MeshBasicMaterial({color:0xff69b4,depthTest:false})); m.renderOrder=999; m.visible=false; m.userData={isGroupHandle:true,id}; scene.add(m); return m;};
+        groupHandles=[0,1,2,3,4,5,6,7].map(id=>mkG(id));
+        const mkGR=(c,a)=>{const r=new THREE.Mesh(new THREE.TorusGeometry(28,0.5,16,64),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.6,depthTest:false})); r.renderOrder=998; r.visible=false; r.userData={isGroupRotationHandle:true,axis:a}; scene.add(r); return r;};
+        groupRotHandles=[mkGR(0xff0000,'x'), mkGR(0x00ff00,'y'), mkGR(0x0000ff,'z')];
+    }
+
+    function updateGroupGizmoVisuals() {
+        if(currentSelection.length<2) return;
+        const b=new THREE.Box3(); currentSelection.forEach(e=>{e.geometry.computeBoundingBox(); b.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld));});
+        const c=b.getCenter(new THREE.Vector3()), s=b.getSize(new THREE.Vector3());
+        const hb=new THREE.Mesh(new THREE.BoxGeometry(s.x,s.y,s.z)); hb.position.copy(c); groupGizmo.update(hb);
+        const crn=[new THREE.Vector3(-0.5,0.5,0.5),new THREE.Vector3(-0.5,0.5,-0.5),new THREE.Vector3(-0.5,-0.5,0.5),new THREE.Vector3(-0.5,-0.5,-0.5),new THREE.Vector3(0.5,0.5,0.5),new THREE.Vector3(0.5,0.5,-0.5),new THREE.Vector3(0.5,-0.5,0.5),new THREE.Vector3(0.5,-0.5,-0.5)];
+        groupHandles.forEach((h,i)=>h.position.copy(c).add(crn[i].clone().multiply(s)));
+        groupRotHandles.forEach((r,i)=>{r.position.copy(c); r.rotation.set(0,0,0); if(i===0) r.rotateY(Math.PI/2); if(i===1) r.rotateX(Math.PI/2);});
+    }
+
+    function createGhost() { ghostEgg=createEgg(0x28a745,true); ghostEgg.visible=false; scene.add(ghostEgg); }
+    function togglePlacementMode() { isPlacementMode=!isPlacementMode; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.toggle('active', isPlacementMode); }
+    function spawnEgg(p) { const eg=createEgg(0xff69b4); eg.position.copy(p).y+=10.01; scene.add(eg); captureState(); updateSelectionVisuals([eg]); isPlacementMode=false; ghostEgg.visible=false; document.getElementById('egg-spawn-btn').classList.remove('active'); }
+    function getMouseAngle(e, t) { const rect=renderer.domElement.getBoundingClientRect(); const sp=t.position.clone().project(camera); return Math.atan2(e.clientY-(rect.top+(1-sp.y)*rect.height/2), e.clientX-(rect.left+(1+sp.x)*rect.width/2)); }
+    function updateRealTimeSize() { const box=new THREE.Box3(); if(currentSelection.length===0) { document.getElementById('info-w').innerText="0.0"; return; } currentSelection.forEach(e => { e.geometry.computeBoundingBox(); box.union(e.geometry.boundingBox.clone().applyMatrix4(e.matrixWorld)); }); const sz = box.getSize(new THREE.Vector3()); document.getElementById('info-w').innerText=(sz.x*CM_RATIO).toFixed(1); document.getElementById('info-h').innerText=(sz.y*CM_RATIO).toFixed(1); document.getElementById('info-d').innerText=(sz.z*CM_RATIO).toFixed(1); }
+    window.updateColor=(c)=>{ currentSelection.forEach(e=>e.material.color.set(c)); captureState(); };
+    window.executeUndo=()=>{if(history.length<2) return; redoStack.push(history.pop()); applyState(history[history.length-1]);};
+    window.executeRedo=()=>{if(redoStack.length===0) return; const n=redoStack.pop(); history.push(n); applyState(n);};
+    function updateNavButtons(){ document.getElementById('undo-btn').disabled=(history.length<2); document.getElementById('redo-btn').disabled=(redoStack.length===0); }
+    function onKeyDown(e) {
+        if (e.key === "Escape" && (isAxisPickMode || axisSelectionLocked)) {
+            deactivateAxisPickMode(true);
+            updateSelectionVisuals(currentSelection.length ? [currentSelection[0]] : []);
+            return;
+        }
+        if(e.key === "Delete" || e.key === "Backspace") {
+            if(currentSelection.length > 0) {
+                currentSelection.forEach(obj => { scene.remove(obj); });
+                updateSelectionVisuals([]);
+                captureState();
+            }
+        }
+    }
+
+    function captureState() {
+        const s=scene.children.filter(o=>o.userData.isEgg).map(e=>({pos:{x:e.position.x,y:e.position.y,z:e.position.z},rot:{x:e.quaternion.x,y:e.quaternion.y,z:e.quaternion.z,w:e.quaternion.w},scale:{x:e.userData.data.scale.x,y:e.userData.data.scale.y,z:e.userData.data.scale.z},offsets:e.userData.data.offsets.map(o=>({x:o.x,y:o.y,z:o.z})),col:e.material.color.getHex()}));
+        const str=JSON.stringify(s); if(history.length>0 && history[history.length-1]===str) return;
+        history.push(str); redoStack=[]; if(history.length>40) history.shift(); updateNavButtons();
+    }
+    function applyState(str) { try { const data=JSON.parse(str); scene.children.filter(o=>o.userData.isEgg).forEach(e=>{scene.remove(e);}); data.forEach(d=>{const e=createEgg(new THREE.Color(d.col)); e.position.set(d.pos.x,d.pos.y,d.pos.z); e.quaternion.set(d.rot.x,d.rot.y,d.rot.z,d.rot.w); e.userData.data.scale.set(d.scale.x,d.scale.y,d.scale.z); e.userData.data.offsets=d.offsets.map(o=>new THREE.Vector3(o.x,o.y,o.z)); updateMesh(e); scene.add(e);}); updateSelectionVisuals([]); updateNavButtons(); } catch(e) {} }
+    window.saveProject=()=>{const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([history[history.length-1]],{type:"application/json"})); a.download=`crochet_v5.49.14_${Date.now()}.json`; a.click();};
+    window.triggerFileSelect=()=>document.getElementById('file-input').click();
+    window.handleFileSelect=(e)=>{ const f=e.target.files[0]; if(f) { const r=new FileReader(); r.onload=(ev)=>{ applyState(ev.target.result); captureState(); }; r.readAsText(f); } };
+
+    function animate() {
+        requestAnimationFrame(animate);
+        if(currentEgg){
+            const {scale,offsets}=currentEgg.userData.data, p=currentEgg.position, q=currentEgg.quaternion;
+            const ctrls=[new THREE.Vector3(0,10,0),new THREE.Vector3(0,-10,0),new THREE.Vector3(-7,0,0),new THREE.Vector3(7,0,0),new THREE.Vector3(0,0,7),new THREE.Vector3(0,0,-7)];
+            handles.forEach((h,i)=>{ const lP=ctrls[i].clone().multiply(scale).add(offsets[i]).add(ctrls[i].clone().normalize().multiplyScalar(H_OFFSET)); h.position.copy(p).add(lP.applyQuaternion(q)); });
+            [rotX_H, rotY_H, rotZ_H].forEach(r=>{r.position.copy(p); r.quaternion.copy(q); if(r===rotX_H) r.rotateY(Math.PI/2); if(r===rotY_H) r.rotateX(Math.PI/2);});
+            updateAxisPickMarkers();
+        }
+        renderer.render(scene, camera); controls.update();
+    }
+    window.onload = init;
+    // Open P2D modal
+function openP2DModal() {
+    document.getElementById('p2d-modal').style.display = 'block';
+    document.getElementById('p2d-overlay').style.display = 'block';
+}
+
+/**
+ * P2D Engine v1.0
+ * Parses crochet pattern text and creates a 3D model.
+ */
+function generateP2DDesign() {
+    // 1. Get input values
+    const yarnWidthMm = parseFloat(document.getElementById('yarn-select').value);
+    const patternText = document.getElementById('pattern-input').value;
+
+    // 2. Validation
+    if (!patternText.trim()) {
+        alert("Please paste your pattern text first.");
+        return;
+    }
+
+    // 3. STEP 1: PARSE THE PATTERN (Added missing function logic)
+    const roundsData = parsePatternText(patternText);
+    
+    if (roundsData.length === 0) {
+        alert("Could not find any stitch data (e.g., '(12)') in the pattern.");
+        return;
+    }
+
+    // 4. STEP 2: CREATE NEW DESIGN
+    createNewCrochetMesh(roundsData, yarnWidthMm);
+
+    // 5. Finalize
+    closeP2DModal();
+    // Force the engine to recognize the new object by clicking it programmatically
+if(currentEgg) { 
+    const event = { object: currentEgg };
+    // Call your object-select hook here if needed.
+}
+}
+
+/**
+ * NEW: The missing Parser function
+ */
+function parsePatternText(text) {
+    const lines = text.split('\n');
+    let roundsData = [];
+    const stitchRegex = /\((\d+)\)/; // Matches (12), (18) etc.
+
+    lines.forEach((line, index) => {
+        const match = line.match(stitchRegex);
+        if (match && match[1]) {
+            roundsData.push({ round: index + 1, stitches: parseInt(match[1]) });
+        } else {
+            // Fallback for "6sc" or "12 sc" style
+            const scMatch = line.match(/(\d+)\s*sc/i);
+            if (scMatch && scMatch[1]) {
+                roundsData.push({ round: index + 1, stitches: parseInt(scMatch[1]) });
+            }
+        }
+    });
+    return roundsData;
+}
+
+/**
+ * Creates a 3D shape based on the stitch counts.
+ */
+function createNewCrochetMesh(rounds, yarnMm) {
+    const points = [];
+    const heightStep = (yarnMm / 10) * 1.5;
+
+    // 1. Build profile points (engine format)
+    points.push(new THREE.Vector2(0, 0));
+    rounds.forEach((rd, index) => {
+        const radius = (rd.stitches * yarnMm) / Math.PI / 2 / 10; 
+        const yPos = (index + 1) * heightStep;
+        points.push(new THREE.Vector2(radius, yPos));
+    });
+    points.push(new THREE.Vector2(0, (rounds.length + 1) * heightStep));
+
+    // 2. Build geometry and center correction
+    const geometry = new THREE.LatheGeometry(points, 32);
+    
+    // Match createEgg centering by shifting half-height.
+    const totalH = (rounds.length + 1) * heightStep;
+    geometry.translate(0, -totalH / 2, 0); 
+    geometry.userData.origPos = geometry.attributes.position.clone();
+
+    // 3. Mesh and material
+    const material = new THREE.MeshStandardMaterial({ 
+        color: 0x6f42c1, 
+        side: THREE.DoubleSide,
+        transparent: true,
+        opacity: 0.9 
+    });
+    const newMesh = new THREE.Mesh(geometry, material);
+    
+    // 4. Engine-standard data structure (6 offsets)
+    newMesh.userData.isEgg = true;
+    newMesh.userData.data = {
+        scale: new THREE.Vector3(1, 1, 1),
+        // Engine has 6 handles, so keep 6 offsets.
+        offsets: [0,1,2,3,4,5].map(() => new THREE.Vector3(0, 0, 0))
+    };
+
+    scene.add(newMesh);
+
+    // 5. Update global references and refresh
+    currentEgg = newMesh;
+    currentSelection = [newMesh];
+
+    if (typeof captureState === "function") captureState();
+    
+    // Update UI dimensions
+    updateRealTimeSize(); 
+    
+    // Recompute and show handles
+    if (typeof createHandles === "function") {
+        updateSelectionVisuals([newMesh]); 
+    }
+
+    console.log("P2D Object successfully integrated into v5.49.14");
+}
+/**
+ * NEW: The missing Modal Close function
+ */
+function closeP2DModal() {
+    document.getElementById('p2d-modal').style.display = 'none';
+    document.getElementById('p2d-overlay').style.display = 'none';
+}
+    // --- [ Build-A-Crochet Engine v5.49.14 Deep Learning Logic ] ---
+
+window.openDeepLearningModal = () => {
+    if (currentSelection.length === 0) return alert("Select a design to train first.");
+    
+    const weightKey = document.getElementById('yarn-weight-select').value;
+    const config = yarnWeights[weightKey];
+    
+    // Extract pattern data from the current design.
+    const rounds = getPatternDataForLearning(currentSelection, config);
+
+    const learnWin = window.open("", "_blank", "width=500,height=800");
+    
+    let html = `
+    <body style="font-family:monospace; padding:20px; background:#f4f4f4;">
+        <div style="background:white; padding:20px; border-radius:12px; box-shadow:0 4px 15px rgba(0,0,0,0.2);">
+            <h2 style="color:#dc3545; margin-top:0;">🧠 Deep Learning Editor</h2>
+            <p style="font-size:12px; color:#666; line-height:1.5;">
+                Edit values directly, then click <b>DEEP LEARN</b> below.
+            </p>
+            <table border="1" style="width:100%; border-collapse:collapse; font-size:13px; margin-bottom:20px;">
+                <tr style="background:#eee;">
+                    <th style="padding:10px;">Rnd</th><th style="padding:10px;">Instruction</th><th style="padding:10px;">Sts</th>
+                </tr>`;
+
+    rounds.forEach((x) => {
+        html += `
+                <tr>
+                    <td style="padding:8px; text-align:center;">R${x.rnd}</td>
+                    <td style="padding:0;"><input type="text" value="${x.desc}" style="width:95%; border:none; padding:8px;"></td>
+                    <td style="padding:0;"><input type="number" value="${x.sts || 0}" style="width:85%; border:none; padding:8px; text-align:center;"></td>
+                </tr>`;
+    });
+
+    html += `
+            </table>
+            <button onclick="window.opener.finalizeLearning(); window.close();" 
+                style="width:100%; height:50px; background:#dc3545; color:white; border:none; border-radius:10px; font-weight:bold; cursor:pointer; font-size:16px;">
+                🚀 DEEP LEARN (Start Learning)
+            </button>
+        </div>
+    </body>`;
+
+    learnWin.document.write(html);
+};
+
+// Pattern extraction helper
+function getPatternDataForLearning(targets, config) {
+    const rounds = [];
+    const step = config.roundH / 0.5; // Reflect CM_RATIO
+    // Simplified sample generator (replace with full raycast integration later).
+    for(let r=1; r<=20; r++) {
+        rounds.push({rnd: r, desc: r===1?"Magic Ring":"sc around", sts: 6+(r*2)});
+    }
+    return rounds;
+}
+
+window.finalizeLearning = async (payload = {}) => {
+    const notifyProgress = typeof payload.onProgress === "function" ? payload.onProgress : null;
+    if (notifyProgress) notifyProgress(30, "Extracting learning signals...");
+    const editedRounds = (Array.isArray(payload.editedRounds) ? payload.editedRounds : [])
+        .filter(r => Number.isFinite(r.sts) && r.sts > 0 && String(r.desc || "").trim().length > 0)
+        .map((r, i) => ({ rnd: i + 1, desc: String(r.desc || "").trim(), sts: Math.round(r.sts) }));
+    if (!lastGenerationContext || !editedRounds.length) {
+        const message = "Not enough training data. Generate a pattern first, then try again.";
+        if (notifyProgress) notifyProgress(100, message);
+        return { ok: false, message };
+    }
+
+    const weightKey = lastGenerationContext.weightKey;
+    const generatedMap = new Map(lastGenerationContext.generatedRounds.map(r => [r.rnd, r]));
+    const widthRatios = [];
+
+    editedRounds.forEach(er => {
+        if (!Number.isFinite(er.sts) || er.sts <= 0) return;
+        const gr = generatedMap.get(er.rnd);
+        if (!gr || !Number.isFinite(gr.sts) || gr.sts <= 0) return;
+        widthRatios.push(gr.sts / er.sts);
+    });
+
+    if (widthRatios.length > 0) {
+        const avgRatio = widthRatios.reduce((a, b) => a + b, 0) / widthRatios.length;
+        const current = learningState.stitchWidthByWeight[weightKey] || lastGenerationContext.stitchWidthCm;
+        const defaultW = getDefaultStitchWidthCm(yarnWeights[weightKey] || { roundH: 0.38 });
+        const target = current * avgRatio;
+        const clamped = Math.max(defaultW * 0.55, Math.min(defaultW * 1.85, target));
+        const alpha = 0.22;
+        learningState.stitchWidthByWeight[weightKey] = (current * (1 - alpha)) + (clamped * alpha);
+
+        Object.keys(yarnWeights).forEach(otherKey => {
+            if (otherKey === weightKey) return;
+            const dist = getWeightDistance(weightKey, otherKey);
+            const proximity = Math.max(0, 1 - (dist / 7)); // 1.0 for nearest, -> 0 for farthest
+            const transferK = Math.max(0, proximity * proximity);
+            if (transferK <= 0) return;
+
+            const otherCurrent = learningState.stitchWidthByWeight[otherKey] || getDefaultStitchWidthCm(yarnWeights[otherKey]);
+            const otherDefault = getDefaultStitchWidthCm(yarnWeights[otherKey]);
+            const transferRatio = 1 + ((avgRatio - 1) * transferK);
+            const otherTarget = otherCurrent * transferRatio;
+            const otherClamped = Math.max(otherDefault * 0.55, Math.min(otherDefault * 1.85, otherTarget));
+            const otherAlpha = 0.12 * transferK;
+            learningState.stitchWidthByWeight[otherKey] = (otherCurrent * (1 - otherAlpha)) + (otherClamped * otherAlpha);
+        });
+    }
+
+    if (notifyProgress) notifyProgress(65, "Learning stitch gauge...");
+
+    learningState.samples.push({
+        ts: Date.now(),
+        weightKey,
+        projectName: lastGenerationContext.projectName,
+        signature: lastGenerationContext.signature,
+        generated: lastGenerationContext.generatedRounds.slice(0, 120),
+        corrected: editedRounds.slice(0, 120)
+    });
+    learningState.samples = learningState.samples.slice(-80);
+    if (notifyProgress) notifyProgress(85, "Saving updates...");
+    saveLearningState();
+
+    const learnedWidth = learningState.stitchWidthByWeight[weightKey] || lastGenerationContext.stitchWidthCm;
+    const resultMessage = `Learning complete. Stitch width=${learnedWidth.toFixed(3)}cm (deterministic core active).`;
+    if (notifyProgress) notifyProgress(100, resultMessage);
+    return { ok: true, message: resultMessage };
+};
+</script>
+  <div id="p2d-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:320px; background:white; border:2px solid #6f42c1; border-radius:15px; padding:20px; z-index:1001; box-shadow: 0 5px 25px rgba(0,0,0,0.3); font-family:monospace;">
+    
+    <h3 style="margin-top:0; color:#6f42c1; text-align:center;">P2D Pattern Engine</h3>
+
+    <div style="margin-bottom:15px;">
+        <label style="font-weight:bold; font-size:12px;">🧶 Yarn Weight:</label>
+        <select id="yarn-select" style="width:100%; padding:8px; margin-top:5px; border-radius:5px; border:1px solid #ccc; font-size:12px;">
+            <option value="1.35">0 Lace/Micro (1.25-1.5mm)</option>
+            <option value="2.75">1 Super Fine (2.25-3.25mm)</option>
+            <option value="3.35">2 Fine (3.25-3.5mm)</option>
+            <option value="4.12">3 Light (3.75-4.5mm)</option>
+            <option value="5.0" selected>4 Medium (4.5-5.5mm)</option>
+            <option value="6.75">5 Bulky (5.5-8mm)</option>
+            <option value="10.0">6 Super Bulky (8-12mm)</option>
+            <option value="12.75">7 Jumbo (12.75mm+)</option>
+        </select>
+    </div>
+
+    <div style="margin-bottom:15px;">
+        <label style="font-weight:bold; font-size:12px;">📝 Pattern:</label>
+        <textarea id="pattern-input" placeholder="Paste your pattern" style="width:100%; height:80px; margin-top:5px; padding:8px; border-radius:5px; border:1px solid #ccc; resize:none; font-size:11px;"></textarea>
+    </div>
+
+    <button onclick="generateP2DDesign()" style="width:100%; height:40px; background:#6f42c1; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; margin-bottom:10px;">✨ Generate Design (Apply)</button>
+    
+    <button onclick="document.getElementById('p2d-modal').style.display='none'; document.getElementById('p2d-overlay').style.display='none'" style="width:100%; background:none; border:none; color:#888; text-decoration:underline; cursor:pointer; font-size:12px;">Close</button>
+</div>
+
+<div id="p2d-overlay" onclick="this.style.display='none'; document.getElementById('p2d-modal').style.display='none'" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000;"></div>
+</body>
+</html>
